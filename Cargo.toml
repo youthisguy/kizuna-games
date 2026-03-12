@@ -2,21 +2,23 @@
 resolver = "2"
 members = [
   "contracts/escrow",
+  "contracts/game",
+  "contracts/payout",
 ]
 
 [workspace.dependencies]
-soroban-sdk = "21.0.1"
+soroban-sdk = "22.0.0"
 
 [profile.release]
-opt-level = "z"
-overflow-checks = true
-debug = 0
-strip = "symbols"
+opt-level        = "z"
+overflow-checks  = true
+debug            = 0
+strip            = "symbols"
 debug-assertions = false
-panic = "abort"
-codegen-units = 1
-lto = true
+panic            = "abort"
+codegen-units    = 1
+lto              = true
 
 [profile.release-with-logs]
-inherits = "release"
+inherits        = "release"
 debug-assertions = true
