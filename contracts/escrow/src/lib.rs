@@ -3,6 +3,13 @@ use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env, Str
 
 mod events;
 
+#[cfg(not(feature = "testutils"))]
+mod payout {
+    soroban_sdk::contractimport!(
+        file = "../../target/wasm32-unknown-unknown/release/payout.wasm"
+    );
+}
+
 #[cfg(feature = "testutils")]
 extern crate std;
 
@@ -11,6 +18,7 @@ extern crate std;
 pub enum DataKey {
     Game(u64),
     NextId,
+    PayoutContract,
 }
 
 #[derive(Clone, PartialEq)]
@@ -52,6 +60,15 @@ pub struct KingFallEscrow;
 #[contractimpl]
 impl KingFallEscrow {
     const FEE_BPS: u32 = 150;
+
+    pub fn set_payout_contract(env: Env, caller: Address, payout: Address) {
+        caller.require_auth();
+        assert!(
+            !env.storage().instance().has(&DataKey::PayoutContract),
+            "payout already set"
+        );
+        env.storage().instance().set(&DataKey::PayoutContract, &payout);
+    }
 
     pub fn create_game(
         env: Env,
@@ -124,35 +141,59 @@ impl KingFallEscrow {
             caller == data.white || caller == data.black,
             "not a player"
         );
+
         let pot = data.stake * 2;
         let fee = pot * (Self::FEE_BPS as i128) / 10_000;
-        let winnings = pot - fee;
         let client = token::Client::new(&env, &data.token);
         let contract = env.current_contract_address();
-        let winner = match outcome {
+
+        let (winner, loser, winnings, is_draw) = match outcome {
             Outcome::WhiteWins => {
-                client.transfer(&contract, &data.white, &winnings);
-                data.white.clone()
+                let w = pot - fee;
+                client.transfer(&contract, &data.white, &w);
+                (Some(data.white.clone()), Some(data.black.clone()), w, false)
             }
             Outcome::BlackWins => {
-                client.transfer(&contract, &data.black, &winnings);
-                data.black.clone()
+                let w = pot - fee;
+                client.transfer(&contract, &data.black, &w);
+                (Some(data.black.clone()), Some(data.white.clone()), w, false)
             }
             Outcome::Draw => {
                 let each = pot / 2 - fee / 2;
                 client.transfer(&contract, &data.white, &each);
                 client.transfer(&contract, &data.black, &each);
-                data.status = GameStatus::Drawn;
-                data.move_hash = move_hash.clone();
-                env.storage().instance().set(&DataKey::Game(id), &data);
-                events::game_drawn(&env, id, data.white.clone(), data.black.clone(), each);
-                return;
+                (None, None, each, true)
             }
         };
-        data.status = GameStatus::Finished;
+
+        data.status = if is_draw { GameStatus::Drawn } else { GameStatus::Finished };
         data.move_hash = move_hash.clone();
         env.storage().instance().set(&DataKey::Game(id), &data);
-        events::game_finished(&env, id, winner, winnings, move_hash);
+
+        if is_draw {
+            events::game_drawn(&env, id, data.white.clone(), data.black.clone(), winnings);
+        } else {
+            events::game_finished(&env, id, winner.clone().unwrap(), winnings, move_hash);
+        }
+
+        #[cfg(not(feature = "testutils"))]
+        if let Some(payout_addr) = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::PayoutContract)
+        {
+            payout::Client::new(&env, &payout_addr).record_result(
+                &id,
+                &winner,
+                &loser,
+                &data.token,
+                &fee,
+                &winnings,
+                &is_draw,
+                &data.white,
+                &data.black,
+            );
+        }
     }
 
     pub fn offer_draw(env: Env, id: u64, caller: Address) {

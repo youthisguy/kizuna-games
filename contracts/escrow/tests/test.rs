@@ -1,11 +1,10 @@
 use soroban_sdk::{
-    testutils::{Address as _, Ledger as _},
-    token, Address, Env, String,
+    testutils::{Address as _},
+    token::{Client as TokenClient, StellarAssetClient},
+    Address, Env, Vec,
 };
 
-use escrow::{KingFallEscrow, KingFallEscrowClient, Outcome};
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
+use payout::{KingFallPayout, KingFallPayoutClient, PrizeAllocation};
 
 fn setup_env() -> Env {
     let env = Env::default();
@@ -13,295 +12,316 @@ fn setup_env() -> Env {
     env
 }
 
-fn deploy_contract(env: &Env) -> KingFallEscrowClient<'_> {
-    let id = env.register(KingFallEscrow {}, ());
-    KingFallEscrowClient::new(env, &id)
+fn deploy(env: &Env) -> KingFallPayoutClient<'_> {
+    let id = env.register(KingFallPayout {}, ());
+    KingFallPayoutClient::new(env, &id)
 }
 
-fn create_token<'a>(env: &'a Env, admin: &Address, amount: i128) -> (Address, token::Client<'a>) {
+fn deploy_token(env: &Env, admin: &Address) -> Address {
     let asset = env.register_stellar_asset_contract_v2(admin.clone());
-    token::StellarAssetClient::new(env, &asset.address()).mint(admin, &amount);
-    (asset.address(), token::Client::new(env, &asset.address()))
+    asset.address()
 }
 
-fn pgn_hash(env: &Env) -> String {
-    String::from_str(env, "a3f1b2c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2")
+fn mint(env: &Env, token: &Address, admin: &Address, to: &Address, amount: i128) {
+    StellarAssetClient::new(env, token).mint(to, &amount);
+    let _ = admin;
 }
 
-// ── 1. Create ─────────────────────────────────────────────────────────────────
+// ── Init ──────────────────────────────────────────────────────────────────────
 
 #[test]
-fn test_create_game_locks_stake() {
+fn test_initialize() {
     let env = setup_env();
-    let client = deploy_contract(&env);
-    let white = Address::generate(&env);
-    let (token_id, token) = create_token(&env, &white, 10_000_000);
-
-    let id = client.create_game(&white, &token_id, &5_000_000i128, &0u64);
-
-    assert_eq!(id, 1u64);
-    let game = client.get_game(&id);
-    assert_eq!(game.stake, 5_000_000i128);
-    assert_eq!(game.white, white);
-    assert_eq!(token.balance(&client.address), 5_000_000i128);
+    let client = deploy(&env);
+    let admin   = Address::generate(&env);
+    let escrow  = Address::generate(&env);
+    let nft     = Address::generate(&env);
+    client.initialize(&admin, &escrow, &nft);
 }
 
 #[test]
-#[should_panic(expected = "stake must be positive")]
-fn test_create_game_rejects_zero_stake() {
+#[should_panic(expected = "already initialized")]
+fn test_initialize_twice_rejected() {
     let env = setup_env();
-    let client = deploy_contract(&env);
-    let white = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &white, 1_000_000);
-    client.create_game(&white, &token_id, &0i128, &0u64);
+    let client = deploy(&env);
+    let admin  = Address::generate(&env);
+    let escrow = Address::generate(&env);
+    let nft    = Address::generate(&env);
+    client.initialize(&admin, &escrow, &nft);
+    client.initialize(&admin, &escrow, &nft);
 }
 
-// ── 2. Join ───────────────────────────────────────────────────────────────────
+// ── record_result ─────────────────────────────────────────────────────────────
 
 #[test]
-fn test_join_game_activates_match() {
-    let env = setup_env();
-    let client = deploy_contract(&env);
-    let white = Address::generate(&env);
-    let black = Address::generate(&env);
-    let (token_id, token) = create_token(&env, &white, 10_000_000);
-    token.transfer(&white, &black, &5_000_000i128);
+fn test_record_result_win_updates_stats_and_fee() {
+    let env    = setup_env();
+    let client = deploy(&env);
+    let admin  = Address::generate(&env);
+    let escrow = Address::generate(&env);
+    let nft    = Address::generate(&env);
+    let white  = Address::generate(&env);
+    let black  = Address::generate(&env);
+    let token  = deploy_token(&env, &admin);
 
-    let id = client.create_game(&white, &token_id, &5_000_000i128, &0u64);
-    client.join_game(&id, &black);
+    client.initialize(&admin, &escrow, &nft);
 
-    let game = client.get_game(&id);
-    assert_eq!(game.black, black);
-    assert_eq!(client.get_pot(&id), 10_000_000i128);
-    assert_eq!(token.balance(&client.address), 10_000_000i128);
-}
+    client.record_result(
+        &1u64,
+        &Some(white.clone()),
+        &Some(black.clone()),
+        &token,
+        &150_000i128,
+        &9_850_000i128,
+        &false,
+        &white,
+        &black,
+    );
 
-#[test]
-#[should_panic(expected = "cannot play yourself")]
-fn test_join_own_game_rejected() {
-    let env = setup_env();
-    let client = deploy_contract(&env);
-    let white = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &white, 10_000_000);
-    let id = client.create_game(&white, &token_id, &5_000_000i128, &0u64);
-    client.join_game(&id, &white);
-}
-
-#[test]
-#[should_panic(expected = "join deadline passed")]
-fn test_join_after_deadline_rejected() {
-    let env = setup_env();
-    let client = deploy_contract(&env);
-    let white = Address::generate(&env);
-    let black = Address::generate(&env);
-    let (token_id, token) = create_token(&env, &white, 10_000_000);
-    token.transfer(&white, &black, &5_000_000i128);
-
-    let id = client.create_game(&white, &token_id, &5_000_000i128, &100u64);
-    env.ledger().set_timestamp(200);
-    client.join_game(&id, &black);
-}
-
-// ── 3. White Wins ─────────────────────────────────────────────────────────────
-// pot=10_000_000, fee=1.5%=150_000, winnings=9_850_000
-
-#[test]
-fn test_white_wins_receives_pot_minus_fee() {
-    let env = setup_env();
-    let client = deploy_contract(&env);
-    let white = Address::generate(&env);
-    let black = Address::generate(&env);
-    let (token_id, token) = create_token(&env, &white, 10_000_000);
-    token.transfer(&white, &black, &5_000_000i128);
-
-    let id = client.create_game(&white, &token_id, &5_000_000i128, &0u64);
-    client.join_game(&id, &black);
-    client.finish_game(&id, &white, &Outcome::WhiteWins, &pgn_hash(&env));
-
-    assert_eq!(token.balance(&white), 9_850_000i128);
-    assert_eq!(token.balance(&black), 0i128);
-    let game = client.get_game(&id);
-    assert_eq!(game.move_hash, pgn_hash(&env));
-}
-
-// ── 4. Black Wins ─────────────────────────────────────────────────────────────
-
-#[test]
-fn test_black_wins_receives_pot_minus_fee() {
-    let env = setup_env();
-    let client = deploy_contract(&env);
-    let white = Address::generate(&env);
-    let black = Address::generate(&env);
-    let (token_id, token) = create_token(&env, &white, 10_000_000);
-    token.transfer(&white, &black, &5_000_000i128);
-
-    let id = client.create_game(&white, &token_id, &5_000_000i128, &0u64);
-    client.join_game(&id, &black);
-    client.finish_game(&id, &black, &Outcome::BlackWins, &pgn_hash(&env));
-
-    assert_eq!(token.balance(&black), 9_850_000i128);
-    assert_eq!(token.balance(&white), 0i128);
-}
-
-// ── 5. Draw ───────────────────────────────────────────────────────────────────
-// pot=10_000_000, fee=150_000, each = 5_000_000 - 75_000 = 4_925_000
-
-#[test]
-fn test_draw_splits_stake_equally() {
-    let env = setup_env();
-    let client = deploy_contract(&env);
-    let white = Address::generate(&env);
-    let black = Address::generate(&env);
-    let (token_id, token) = create_token(&env, &white, 10_000_000);
-    token.transfer(&white, &black, &5_000_000i128);
-
-    let id = client.create_game(&white, &token_id, &5_000_000i128, &0u64);
-    client.join_game(&id, &black);
-    client.finish_game(&id, &white, &Outcome::Draw, &pgn_hash(&env));
-
-    assert_eq!(token.balance(&white), 4_925_000i128);
-    assert_eq!(token.balance(&black), 4_925_000i128);
-}
-
-// ── 6. Draw Handshake ─────────────────────────────────────────────────────────
-
-#[test]
-fn test_draw_offer_and_accept() {
-    let env = setup_env();
-    let client = deploy_contract(&env);
-    let white = Address::generate(&env);
-    let black = Address::generate(&env);
-    let (token_id, token) = create_token(&env, &white, 10_000_000);
-    token.transfer(&white, &black, &5_000_000i128);
-
-    let id = client.create_game(&white, &token_id, &5_000_000i128, &0u64);
-    client.join_game(&id, &black);
-    client.offer_draw(&id, &white);
-
-    let game = client.get_game(&id);
-    assert!(game.draw_offered_by.is_some());
-
-    client.accept_draw(&id, &black);
-
-    assert!(token.balance(&white) > 0);
-    assert!(token.balance(&black) > 0);
+    assert_eq!(client.fee_balance(&token), 150_000i128);
+    let stats = client.get_stats(&white);
+    assert_eq!(stats.wins, 1u32);
+    assert_eq!(stats.earned, 9_850_000i128);
+    let loser_stats = client.get_stats(&black);
+    assert_eq!(loser_stats.losses, 1u32);
+    assert_eq!(loser_stats.earned, 0i128);
 }
 
 #[test]
-#[should_panic(expected = "cannot accept your own draw offer")]
-fn test_cannot_accept_own_draw_offer() {
-    let env = setup_env();
-    let client = deploy_contract(&env);
-    let white = Address::generate(&env);
-    let black = Address::generate(&env);
-    let (token_id, token) = create_token(&env, &white, 10_000_000);
-    token.transfer(&white, &black, &5_000_000i128);
+fn test_record_result_draw_updates_both_players() {
+    let env    = setup_env();
+    let client = deploy(&env);
+    let admin  = Address::generate(&env);
+    let escrow = Address::generate(&env);
+    let nft    = Address::generate(&env);
+    let white  = Address::generate(&env);
+    let black  = Address::generate(&env);
+    let token  = deploy_token(&env, &admin);
 
-    let id = client.create_game(&white, &token_id, &5_000_000i128, &0u64);
-    client.join_game(&id, &black);
-    client.offer_draw(&id, &white);
-    client.accept_draw(&id, &white);
-}
+    client.initialize(&admin, &escrow, &nft);
 
-// ── 7. Cancel ─────────────────────────────────────────────────────────────────
+    client.record_result(
+        &1u64,
+        &None,
+        &None,
+        &token,
+        &150_000i128,
+        &4_925_000i128,
+        &true,
+        &white,
+        &black,
+    );
 
-#[test]
-fn test_cancel_refunds_white_after_deadline() {
-    let env = setup_env();
-    let client = deploy_contract(&env);
-    let white = Address::generate(&env);
-    let (token_id, token) = create_token(&env, &white, 5_000_000);
-
-    let id = client.create_game(&white, &token_id, &5_000_000i128, &100u64);
-    assert_eq!(token.balance(&white), 0i128);
-
-    env.ledger().set_timestamp(200);
-    client.cancel_game(&id);
-
-    assert_eq!(token.balance(&white), 5_000_000i128);
-}
-
-#[test]
-#[should_panic(expected = "deadline not yet passed")]
-fn test_cancel_before_deadline_rejected() {
-    let env = setup_env();
-    let client = deploy_contract(&env);
-    let white = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &white, 5_000_000);
-
-    let id = client.create_game(&white, &token_id, &5_000_000i128, &9999u64);
-    client.cancel_game(&id);
-}
-
-// ── 8. Timeout ────────────────────────────────────────────────────────────────
-
-#[test]
-fn test_timeout_claim_pays_claimer() {
-    let env = setup_env();
-    let client = deploy_contract(&env);
-    let white = Address::generate(&env);
-    let black = Address::generate(&env);
-    let (token_id, token) = create_token(&env, &white, 10_000_000);
-    token.transfer(&white, &black, &5_000_000i128);
-
-    let id = client.create_game(&white, &token_id, &5_000_000i128, &0u64);
-    client.join_game(&id, &black);
-    env.ledger().set_timestamp(600);
-    client.claim_timeout(&id, &white, &500u64);
-
-    assert_eq!(token.balance(&white), 9_850_000i128);
+    let ws = client.get_stats(&white);
+    let bs = client.get_stats(&black);
+    assert_eq!(ws.draws, 1u32);
+    assert_eq!(bs.draws, 1u32);
+    assert_eq!(ws.earned, 4_925_000i128);
+    assert_eq!(bs.earned, 4_925_000i128);
 }
 
 #[test]
-#[should_panic(expected = "timeout not reached")]
-fn test_timeout_before_window_rejected() {
-    let env = setup_env();
-    let client = deploy_contract(&env);
-    let white = Address::generate(&env);
-    let black = Address::generate(&env);
-    let (token_id, token) = create_token(&env, &white, 10_000_000);
-    token.transfer(&white, &black, &5_000_000i128);
+fn test_record_result_accumulates_fees_across_games() {
+    let env    = setup_env();
+    let client = deploy(&env);
+    let admin  = Address::generate(&env);
+    let escrow = Address::generate(&env);
+    let nft    = Address::generate(&env);
+    let token  = deploy_token(&env, &admin);
+    let white  = Address::generate(&env);
+    let black  = Address::generate(&env);
 
-    let id = client.create_game(&white, &token_id, &5_000_000i128, &0u64);
-    client.join_game(&id, &black);
-    client.claim_timeout(&id, &white, &500u64);
+    client.initialize(&admin, &escrow, &nft);
+
+    for i in 0u64..3 {
+        client.record_result(
+            &i,
+            &Some(white.clone()),
+            &Some(black.clone()),
+            &token,
+            &150_000i128,
+            &9_850_000i128,
+            &false,
+            &white,
+            &black,
+        );
+    }
+
+    assert_eq!(client.fee_balance(&token), 450_000i128);
+    assert_eq!(client.get_stats(&white).wins, 3u32);
 }
 
-// ── 9. Access control ─────────────────────────────────────────────────────────
+// ── Fee withdrawal ────────────────────────────────────────────────────────────
 
 #[test]
-#[should_panic(expected = "not a player")]
-fn test_stranger_cannot_finish_game() {
-    let env = setup_env();
-    let client = deploy_contract(&env);
-    let white = Address::generate(&env);
-    let black = Address::generate(&env);
-    let stranger = Address::generate(&env);
-    let (token_id, token) = create_token(&env, &white, 10_000_000);
-    token.transfer(&white, &black, &5_000_000i128);
+fn test_withdraw_fees() {
+    let env      = setup_env();
+    let client   = deploy(&env);
+    let admin    = Address::generate(&env);
+    let escrow   = Address::generate(&env);
+    let nft      = Address::generate(&env);
+    let token    = deploy_token(&env, &admin);
+    let treasury = Address::generate(&env);
+    let white    = Address::generate(&env);
+    let black    = Address::generate(&env);
 
-    let id = client.create_game(&white, &token_id, &5_000_000i128, &0u64);
-    client.join_game(&id, &black);
-    client.finish_game(&id, &stranger, &Outcome::WhiteWins, &pgn_hash(&env));
+    mint(&env, &token, &admin, &client.address, 150_000i128);
+    client.initialize(&admin, &escrow, &nft);
+
+    client.record_result(
+        &1u64,
+        &Some(white.clone()),
+        &Some(black.clone()),
+        &token,
+        &150_000i128,
+        &9_850_000i128,
+        &false,
+        &white,
+        &black,
+    );
+
+    client.withdraw_fees(&token, &150_000i128, &treasury);
+
+    assert_eq!(client.fee_balance(&token), 0i128);
+    assert_eq!(TokenClient::new(&env, &token).balance(&treasury), 150_000i128);
 }
 
-// ── 10. get_pot phases ────────────────────────────────────────────────────────
+#[test]
+#[should_panic(expected = "insufficient fee balance")]
+fn test_withdraw_fees_exceeds_balance() {
+    let env    = setup_env();
+    let client = deploy(&env);
+    let admin  = Address::generate(&env);
+    let escrow = Address::generate(&env);
+    let nft    = Address::generate(&env);
+    let token  = deploy_token(&env, &admin);
+    let to     = Address::generate(&env);
+
+    client.initialize(&admin, &escrow, &nft);
+    client.withdraw_fees(&token, &1i128, &to);
+}
+
+// ── Prize pool ────────────────────────────────────────────────────────────────
 
 #[test]
-fn test_get_pot_reflects_game_phase() {
-    let env = setup_env();
-    let client = deploy_contract(&env);
-    let white = Address::generate(&env);
-    let black = Address::generate(&env);
-    let (token_id, token) = create_token(&env, &white, 10_000_000);
-    token.transfer(&white, &black, &5_000_000i128);
+fn test_fund_prize_pool() {
+    let env    = setup_env();
+    let client = deploy(&env);
+    let admin  = Address::generate(&env);
+    let escrow = Address::generate(&env);
+    let nft    = Address::generate(&env);
+    let token  = deploy_token(&env, &admin);
+    let funder = Address::generate(&env);
 
-    let id = client.create_game(&white, &token_id, &5_000_000i128, &0u64);
-    assert_eq!(client.get_pot(&id), 5_000_000i128);
+    mint(&env, &token, &admin, &funder, 1_000_000i128);
+    client.initialize(&admin, &escrow, &nft);
 
-    client.join_game(&id, &black);
-    assert_eq!(client.get_pot(&id), 10_000_000i128);
+    client.fund_prize_pool(&funder, &token, &1_000_000i128);
+    assert_eq!(client.prize_pool_balance(&token), 1_000_000i128);
+}
 
-    client.finish_game(&id, &white, &Outcome::WhiteWins, &pgn_hash(&env));
-    assert_eq!(client.get_pot(&id), 0i128);
+#[test]
+fn test_distribute_season() {
+    let env    = setup_env();
+    let client = deploy(&env);
+    let admin  = Address::generate(&env);
+    let escrow = Address::generate(&env);
+    let nft    = Address::generate(&env);
+    let token  = deploy_token(&env, &admin);
+    let p1     = Address::generate(&env);
+    let p2     = Address::generate(&env);
+
+    mint(&env, &token, &admin, &client.address, 1_000_000i128);
+    client.initialize(&admin, &escrow, &nft);
+    client.fund_prize_pool(&client.address, &token, &1_000_000i128);
+
+    client.start_season();
+    client.end_season();
+
+    let mut allocs = Vec::new(&env);
+    allocs.push_back(PrizeAllocation { player: p1.clone(), amount: 600_000i128 });
+    allocs.push_back(PrizeAllocation { player: p2.clone(), amount: 400_000i128 });
+
+    client.distribute_season(&token, &allocs);
+
+    assert_eq!(TokenClient::new(&env, &token).balance(&p1), 600_000i128);
+    assert_eq!(TokenClient::new(&env, &token).balance(&p2), 400_000i128);
+    assert_eq!(client.prize_pool_balance(&token), 0i128);
+}
+
+#[test]
+#[should_panic(expected = "end the season before distributing")]
+fn test_distribute_during_active_season_rejected() {
+    let env    = setup_env();
+    let client = deploy(&env);
+    let admin  = Address::generate(&env);
+    let escrow = Address::generate(&env);
+    let nft    = Address::generate(&env);
+    let token  = deploy_token(&env, &admin);
+
+    client.initialize(&admin, &escrow, &nft);
+    client.start_season();
+
+    let allocs = Vec::new(&env);
+    client.distribute_season(&token, &allocs);
+}
+
+#[test]
+#[should_panic(expected = "prize pool insufficient")]
+fn test_distribute_exceeds_pool_rejected() {
+    let env    = setup_env();
+    let client = deploy(&env);
+    let admin  = Address::generate(&env);
+    let escrow = Address::generate(&env);
+    let nft    = Address::generate(&env);
+    let token  = deploy_token(&env, &admin);
+    let p1     = Address::generate(&env);
+
+    client.initialize(&admin, &escrow, &nft);
+
+    let mut allocs = Vec::new(&env);
+    allocs.push_back(PrizeAllocation { player: p1, amount: 1_000_000i128 });
+    client.distribute_season(&token, &allocs);
+}
+
+// ── Leaderboard ───────────────────────────────────────────────────────────────
+
+#[test]
+fn test_snapshot_and_get_leaderboard() {
+    let env    = setup_env();
+    let client = deploy(&env);
+    let admin  = Address::generate(&env);
+    let escrow = Address::generate(&env);
+    let nft    = Address::generate(&env);
+    let p1     = Address::generate(&env);
+    let p2     = Address::generate(&env);
+
+    client.initialize(&admin, &escrow, &nft);
+
+    let mut players = Vec::new(&env);
+    players.push_back(p1.clone());
+    players.push_back(p2.clone());
+    client.snapshot_leaderboard(&players);
+
+    let board = client.get_leaderboard();
+    assert_eq!(board.len(), 2u32);
+    assert_eq!(board.get(0).unwrap(), p1);
+    assert_eq!(board.get(1).unwrap(), p2);
+}
+
+// ── Admin ─────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_transfer_admin() {
+    let env       = setup_env();
+    let client    = deploy(&env);
+    let admin     = Address::generate(&env);
+    let new_admin = Address::generate(&env);
+    let escrow    = Address::generate(&env);
+    let nft       = Address::generate(&env);
+    let _token    = deploy_token(&env, &admin);
+    let _to       = Address::generate(&env);
+
+    client.initialize(&admin, &escrow, &nft);
+    client.transfer_admin(&new_admin);
 }

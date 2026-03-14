@@ -9,9 +9,9 @@ pub enum DataKey {
     Admin,
     EscrowContract,
     NftContract,
-    FeeBalance(Address),   // token → accumulated fees
-    PrizePool(Address),    // token → prize pool balance
-    LeaderboardEntry(Address), // player → LifetimeStats
+    FeeBalance(Address),   // token > accumulated fees
+    PrizePool(Address),    // token > prize pool balance
+    LeaderboardEntry(Address), // player > LifetimeStats
     TopPlayers,            // Vec<Address> — ordered leaderboard snapshot
     SeasonActive,
     SeasonId,

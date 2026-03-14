@@ -8,7 +8,7 @@ use soroban_sdk::{
 pub enum DataKey {
     Game(u64),   
     NextId,        
-    EscrowContract, // address of the escrow contract (set on init)
+    EscrowContract,
 }
 
 #[derive(Clone, PartialEq)]
@@ -331,7 +331,7 @@ impl KingFallGame {
         }
     }
 
-    // ── Private ───
+    // ── Private ──
 
     fn load_game(env: &Env, id: u64) -> GameState {
         env.storage()
