@@ -7,9 +7,10 @@ import {
   TransactionBuilder,
   Networks,
   Address,
-  scValToNative,
   Contract,
   nativeToScVal,
+  xdr,
+  scValToNative,
 } from "@stellar/stellar-sdk";
 import {
   Crown,
@@ -24,28 +25,26 @@ import {
   Flag,
   Trophy,
   Handshake,
-  ChevronRight,
   Copy,
   CheckCheck,
-  Zap,
 } from "lucide-react";
-import { FaWallet } from "react-icons/fa";
 import { AnimatePresence, motion } from "framer-motion";
 
-// ─── Contract Config ───────────────────────────────────────────────────────────
-const KINGFALL_CONTRACT_ID = "CAIO6PTUCO7NMIF67T4I7QFWHZSYWVVZ3WVFLRD7LEUQI64RKDLQD4VH";
-const RPC_URL = "https://soroban-testnet.stellar.org:443";
-const server = new StellarRpc.Server(RPC_URL);
-const networkPassphrase = Networks.TESTNET;
+// ─── Contract Config ───
+const ESCROW_CONTRACT_ID = "CC4NHEPTQCYD2QH3A3SBDES654KNMANJIPFVV6X63MXUZY6WZW2OPO6N";
+const NATIVE_TOKEN_ID    = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
+const RPC_URL            = "https://soroban-testnet.stellar.org:443";
+const server             = new StellarRpc.Server(RPC_URL);
+const networkPassphrase  = Networks.TESTNET;
 
-// ─── Chess Types ───────────────────────────────────────────────────────────────
+// ─── Chess Types ───
 type PieceType = "K" | "Q" | "R" | "B" | "N" | "P";
-type Color = "w" | "b";
-type Piece = { type: PieceType; color: Color } | null;
-type Board = Piece[][];
-type Square = { row: number; col: number };
+type Color     = "w" | "b";
+type Piece     = { type: PieceType; color: Color } | null;
+type Board     = Piece[][];
+type Square    = { row: number; col: number };
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
+// ─── Helpers ───
 function stroopsToXlm(stroops: bigint | number): string {
   return (Number(stroops) / 10_000_000).toFixed(2);
 }
@@ -65,11 +64,10 @@ const PIECE_UNICODE: Record<PieceType, { w: string; b: string }> = {
   P: { w: "♙", b: "♟" },
 };
 
-// ─── Initial Board ─────────────────────────────────────────────────────────────
+// ─── Initial Board ───
 function createInitialBoard(): Board {
   const board: Board = Array(8).fill(null).map(() => Array(8).fill(null));
   const backRank: PieceType[] = ["R", "N", "B", "Q", "K", "B", "N", "R"];
-
   backRank.forEach((type, col) => {
     board[0][col] = { type, color: "b" };
     board[7][col] = { type, color: "w" };
@@ -81,16 +79,14 @@ function createInitialBoard(): Board {
   return board;
 }
 
-// ─── Move Generation (simplified legal moves) ─────────────────────────────────
+// ─── Move Generation ───
 function getValidMoves(board: Board, sq: Square, currentTurn: Color): Square[] {
   const piece = board[sq.row][sq.col];
   if (!piece || piece.color !== currentTurn) return [];
   const moves: Square[] = [];
-  const inBounds = (r: number, c: number) => r >= 0 && r < 8 && c >= 0 && c < 8;
-  const canLand = (r: number, c: number) =>
-    inBounds(r, c) && board[r][c]?.color !== piece.color;
-  const isEnemy = (r: number, c: number) =>
-    inBounds(r, c) && board[r][c] !== null && board[r][c]?.color !== piece.color;
+  const inBounds  = (r: number, c: number) => r >= 0 && r < 8 && c >= 0 && c < 8;
+  const canLand   = (r: number, c: number) => inBounds(r, c) && board[r][c]?.color !== piece.color;
+  const isEnemy   = (r: number, c: number) => inBounds(r, c) && board[r][c] !== null && board[r][c]?.color !== piece.color;
 
   const slide = (drs: number[], dcs: number[]) => {
     for (let i = 0; i < drs.length; i++) {
@@ -119,53 +115,106 @@ function getValidMoves(board: Board, sq: Square, currentTurn: Color): Square[] {
     }
     case "N":
       [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc]) => {
-        if (canLand(sq.row+dr, sq.col+dc)) moves.push({ row: sq.row+dr, col: sq.col+dc });
+        if (canLand(sq.row+dr!, sq.col+dc!)) moves.push({ row: sq.row+dr!, col: sq.col+dc! });
       });
       break;
-    case "B": slide([-1,-1,-1,1],[- 1,1,1,-1]); break;
-    case "R": slide([-1,1,0,0],[0,0,-1,1]); break;
-    case "Q": slide([-1,1,0,0,-1,-1,1,1],[0,0,-1,1,-1,1,-1,1]); break;
+    case "B": slide([-1,-1,-1, 1],[-1, 1, 1,-1]); break;
+    case "R": slide([-1, 1, 0, 0],[ 0, 0,-1, 1]); break;
+    case "Q": slide([-1, 1, 0, 0,-1,-1, 1, 1],[ 0, 0,-1, 1,-1, 1,-1, 1]); break;
     case "K":
       [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]].forEach(([dr,dc]) => {
-        if (canLand(sq.row+dr, sq.col+dc)) moves.push({ row: sq.row+dr, col: sq.col+dc });
+        if (canLand(sq.row+dr!, sq.col+dc!)) moves.push({ row: sq.row+dr!, col: sq.col+dc! });
       });
       break;
   }
   return moves;
 }
 
-function toAlgebraic(row: number, col: number): string {
-  return `${"abcdefgh"[col]}${8 - row}`;
+function toSAN(piece: Piece, from: Square, to: Square, captured: Piece): string {
+  if (!piece) return "";
+  const files = "abcdefgh";
+  const toSq  = `${files[to.col]}${8 - to.row}`;
+  if (piece.type === "P") {
+    if (captured) return `${files[from.col]}x${toSq}`;
+    return toSq;
+  }
+  return `${piece.type}${captured ? "x" : ""}${toSq}`;
 }
 
-// ─── Component ─────────────────────────────────────────────────────────────────
+// ─── Contract Interaction ───
+async function sendTx(
+  connectedAddress: string,
+  walletsKit: any,
+  method: string,
+  args: xdr.ScVal[],
+  onStatus: (s: { type: "success"|"error"|"pending"; msg: string; hash?: string }) => void
+): Promise<xdr.ScVal | null> {
+  onStatus({ type: "pending", msg: `Broadcasting ${method}...` });
+  try {
+    const account  = await server.getAccount(connectedAddress);
+    const contract = new Contract(ESCROW_CONTRACT_ID);
+    const tx = new TransactionBuilder(account, { fee: "10000", networkPassphrase })
+      .addOperation(contract.call(method, ...args))
+      .setTimeout(30)
+      .build();
+    const prepared = await server.prepareTransaction(tx);
+    const { signedTxXdr } = await walletsKit.signTransaction(prepared.toXDR());
+    const response = await server.sendTransaction(
+      TransactionBuilder.fromXDR(signedTxXdr, networkPassphrase)
+    );
+    if (response.status === "ERROR") throw new Error("Transaction rejected");
+
+    let getResponse = await server.getTransaction(response.hash);
+    while (getResponse.status === "NOT_FOUND") {
+      await new Promise(r => setTimeout(r, 1000));
+      getResponse = await server.getTransaction(response.hash);
+    }
+    if (getResponse.status === "SUCCESS") {
+      onStatus({ type: "success", msg: `${method} confirmed`, hash: response.hash });
+      const result = (getResponse as any).returnValue;
+      return result ?? null;
+    }
+    throw new Error("Transaction failed on-chain");
+  } catch (err: any) {
+    onStatus({ type: "error", msg: err.message || `${method} failed` });
+    return null;
+  }
+}
+
+// ─── Outcome ScVal encoder ───
+function outcomeScVal(outcome: "WhiteWins" | "BlackWins" | "Draw"): xdr.ScVal {
+  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(outcome)]);
+}
+
+// ─── Component ───
 export default function KingFallPage() {
-  const { address: connectedAddress, walletsKit, setAddress } = useWallet();
+  const { address: connectedAddress, walletsKit } = useWallet();
   const [mounted, setMounted] = useState(false);
 
-  // Game state
-  const [board, setBoard] = useState<Board>(createInitialBoard());
+  // Board state
+  const [board, setBoard]           = useState<Board>(createInitialBoard());
   const [currentTurn, setCurrentTurn] = useState<Color>("w");
-  const [selected, setSelected] = useState<Square | null>(null);
+  const [selected, setSelected]     = useState<Square | null>(null);
   const [validMoves, setValidMoves] = useState<Square[]>([]);
   const [moveHistory, setMoveHistory] = useState<string[]>([]);
-  const [gamePhase, setGamePhase] = useState<"lobby" | "staking" | "playing" | "ended">("lobby");
-  const [winner, setWinner] = useState<"w" | "b" | "draw" | null>(null);
-  const [capturedW, setCapturedW] = useState<Piece[]>([]);
-  const [capturedB, setCapturedB] = useState<Piece[]>([]);
-  const [lastMove, setLastMove] = useState<{ from: Square; to: Square } | null>(null);
+  const [gamePhase, setGamePhase]   = useState<"lobby" | "playing" | "ended">("lobby");
+  const [winner, setWinner]         = useState<"w" | "b" | "draw" | null>(null);
+  const [capturedW, setCapturedW]   = useState<Piece[]>([]);
+  const [capturedB, setCapturedB]   = useState<Piece[]>([]);
+  const [lastMove, setLastMove]     = useState<{ from: Square; to: Square } | null>(null);
 
-  // Staking state
+  // Staking / lobby
   const [stakeAmount, setStakeAmount] = useState("5");
-  const [xlmBalance, setXlmBalance] = useState("0");
+  const [xlmBalance, setXlmBalance]   = useState("0");
+  const [myGameCode]                  = useState(() => Math.random().toString(36).slice(2, 8).toUpperCase());
   const [opponentCode, setOpponentCode] = useState("");
-  const [myGameCode] = useState(() => Math.random().toString(36).slice(2, 8).toUpperCase());
-  const [codeCopied, setCodeCopied] = useState(false);
+  const [codeCopied, setCodeCopied]   = useState(false);
 
-  // Onchain state
-  const [contractState, setContractState] = useState<number | null>(null);
-  const [potSize, setPotSize] = useState<bigint>(0n);
-  const [loading, setLoading] = useState(false);
+  // Onchain
+  const [gameId, setGameId]     = useState<bigint | null>(null);
+  const [potSize, setPotSize]   = useState<bigint>(0n);
+  const [loading, setLoading]   = useState(false);
+  const [drawOffered, setDrawOffered] = useState(false);
   const [txStatus, setTxStatus] = useState<{
     type: "success" | "error" | "pending";
     msg: string;
@@ -195,11 +244,11 @@ export default function KingFallPage() {
     return `${m}:${s}`;
   };
 
-  // Load XLM balance
+  // XLM balance
   const loadXlmBalance = useCallback(async () => {
-    if (!connectedAddress || typeof window === "undefined") return;
+    if (!connectedAddress) return;
     try {
-      const res = await fetch(`https://horizon-testnet.stellar.org/accounts/${connectedAddress}`);
+      const res  = await fetch(`https://horizon-testnet.stellar.org/accounts/${connectedAddress}`);
       const data = await res.json();
       const native = data.balances?.find((b: any) => b.asset_type === "native");
       setXlmBalance(native ? parseFloat(native.balance).toFixed(2) : "0");
@@ -216,41 +265,67 @@ export default function KingFallPage() {
     }
   }, [txStatus]);
 
-  // ── Chess Logic ────────────────────────────────────────────────────────────────
+  // Poll game state when active
+  useEffect(() => {
+    if (!gameId || gamePhase !== "playing") return;
+    const poll = setInterval(async () => {
+      try {
+        const account  = await server.getAccount(connectedAddress!);
+        const contract = new Contract(ESCROW_CONTRACT_ID);
+        const tx = new TransactionBuilder(account, { fee: "100", networkPassphrase })
+          .addOperation(contract.call("get_game", nativeToScVal(gameId, { type: "u64" })))
+          .setTimeout(30)
+          .build();
+        const result = await server.simulateTransaction(tx);
+        if ("result" in result && result.result?.retval) {
+          const data = scValToNative(result.result.retval) as any;
+          if (data.status === "Finished" || data.status === "Drawn") {
+            setGamePhase("ended");
+            if (data.status === "Drawn") {
+              setWinner("draw");
+            } else {
+              const myAddr = connectedAddress;
+              setWinner(data.white === myAddr ? "w" : "b");
+            }
+          }
+        }
+      } catch {}
+    }, 5000);
+    return () => clearInterval(poll);
+  }, [gameId, gamePhase, connectedAddress]);
+
+  // ── Chess Logic ──
   const handleSquareClick = (row: number, col: number) => {
     if (gamePhase !== "playing") return;
 
     if (selected) {
       const isValid = validMoves.some(m => m.row === row && m.col === col);
       if (isValid) {
-        const newBoard = board.map(r => [...r]);
-        const captured = newBoard[row][col];
+        const newBoard  = board.map(r => [...r]);
+        const captured  = newBoard[row][col];
+        let movingPiece = newBoard[selected.row][selected.col]!;
+
         if (captured) {
           if (captured.color === "b") setCapturedW(p => [...p, captured]);
           else setCapturedB(p => [...p, captured]);
         }
-
-        // Check pawn promotion
-        let movingPiece = newBoard[selected.row][selected.col]!;
         if (movingPiece.type === "P" && (row === 0 || row === 7)) {
           movingPiece = { ...movingPiece, type: "Q" };
         }
 
-        newBoard[row][col] = movingPiece;
+        const san = toSAN(movingPiece, selected, { row, col }, captured);
+        newBoard[row][col]               = movingPiece;
         newBoard[selected.row][selected.col] = null;
 
-        const moveStr = `${toAlgebraic(selected.row, selected.col)}→${toAlgebraic(row, col)}`;
-        setMoveHistory(h => [...h, moveStr]);
+        setMoveHistory(h => [...h, san]);
         setLastMove({ from: selected, to: { row, col } });
         setBoard(newBoard);
         setCurrentTurn(t => t === "w" ? "b" : "w");
         setSelected(null);
         setValidMoves([]);
 
-        // Check if king captured (simplified win detection)
         if (captured?.type === "K") {
-          setWinner(currentTurn);
-          setGamePhase("ended");
+          handleGameOver(currentTurn === "w" ? "WhiteWins" : "BlackWins", [...moveHistory, san]);
         }
         return;
       }
@@ -266,63 +341,77 @@ export default function KingFallPage() {
     }
   };
 
-  // ── Onchain Stake ──────────────────────────────────────────────────────────────
-  const sendTx = async (method: string, ...args: any[]) => {
-    if (!connectedAddress || !walletsKit) return;
+  // ── Onchain Actions ──
+  const tx = useCallback(async (method: string, args: xdr.ScVal[]) => {
+    if (!connectedAddress || !walletsKit) return null;
     setLoading(true);
-    setTxStatus({ type: "pending", msg: `Broadcasting ${method}...` });
-    try {
-      const account = await server.getAccount(connectedAddress);
-      const contract = new Contract(KINGFALL_CONTRACT_ID);
-      const tx = new TransactionBuilder(account, { fee: "10000", networkPassphrase })
-        .addOperation(contract.call(method, ...args))
-        .setTimeout(30)
-        .build();
-      const prepared = await server.prepareTransaction(tx);
-      const { signedTxXdr } = await walletsKit.signTransaction(prepared.toXDR());
-      const response = await server.sendTransaction(
-        TransactionBuilder.fromXDR(signedTxXdr, networkPassphrase)
-      );
-      if (response.status === "ERROR") throw new Error("Transaction rejected");
+    const result = await sendTx(connectedAddress, walletsKit, method, args, setTxStatus);
+    setLoading(false);
+    loadXlmBalance();
+    return result;
+  }, [connectedAddress, walletsKit, loadXlmBalance]);
 
-      let getResponse = await server.getTransaction(response.hash);
-      while (getResponse.status === "NOT_FOUND") {
-        await new Promise(r => setTimeout(r, 1000));
-        getResponse = await server.getTransaction(response.hash);
-      }
-      if (getResponse.status === "SUCCESS") {
-        setTxStatus({ type: "success", msg: "Stake locked onchain!", hash: response.hash });
-        loadXlmBalance();
-      } else {
-        throw new Error("Transaction failed");
-      }
-    } catch (err: any) {
-      setTxStatus({ type: "error", msg: err.message || `${method} failed` });
-    } finally {
-      setLoading(false);
+  const handleStakeAndStart = async () => {
+    if (!connectedAddress) return;
+    const stroops = xlmToStroops(stakeAmount);
+    const result  = await tx("create_game", [
+      new Address(connectedAddress).toScVal(),
+      new Address(NATIVE_TOKEN_ID).toScVal(),
+      nativeToScVal(stroops, { type: "i128" }),
+      nativeToScVal(0n, { type: "u64" }),
+    ]);
+    if (result) {
+      const id = scValToNative(result) as bigint;
+      setGameId(id);
+      setPotSize(xlmToStroops(stakeAmount));
+      setGamePhase("playing");
     }
   };
 
-  const handleStakeAndStart = () => {
-    const stroops = xlmToStroops(stakeAmount);
-    sendTx("create_game",
-      new Address(connectedAddress!).toScVal(),
-      nativeToScVal(stroops, { type: "i128" })
-    ).then(() => {
-      setPotSize(BigInt(2) * xlmToStroops(stakeAmount));
-      setGamePhase("playing");
-    });
+  const handleJoinGame = async () => {
+    if (!connectedAddress || !gameId) return;
+    await tx("join_game", [
+      nativeToScVal(gameId, { type: "u64" }),
+      new Address(connectedAddress).toScVal(),
+    ]);
+    setPotSize(xlmToStroops(stakeAmount) * 2n);
+  };
+
+  const handleGameOver = async (outcome: "WhiteWins" | "BlackWins" | "Draw", moves: string[]) => {
+    setWinner(outcome === "WhiteWins" ? "w" : outcome === "BlackWins" ? "b" : "draw");
+    setGamePhase("ended");
+
+    if (!gameId || !connectedAddress) return;
+    const pgn = moves.join(" ");
+    await tx("finish_game", [
+      nativeToScVal(gameId, { type: "u64" }),
+      new Address(connectedAddress).toScVal(),
+      outcomeScVal(outcome),
+      nativeToScVal(pgn, { type: "string" }),
+    ]);
   };
 
   const handleResign = () => {
-    setWinner(currentTurn === "w" ? "b" : "w");
-    setGamePhase("ended");
+    const outcome = currentTurn === "w" ? "BlackWins" : "WhiteWins";
+    handleGameOver(outcome as any, moveHistory);
   };
 
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(myGameCode);
-    setCodeCopied(true);
-    setTimeout(() => setCodeCopied(false), 2000);
+  const handleOfferDraw = async () => {
+    if (!gameId || !connectedAddress) return;
+    setDrawOffered(true);
+    await tx("offer_draw", [
+      nativeToScVal(gameId, { type: "u64" }),
+      new Address(connectedAddress).toScVal(),
+    ]);
+  };
+
+  const handleAcceptDraw = async () => {
+    if (!gameId || !connectedAddress) return;
+    await tx("accept_draw", [
+      nativeToScVal(gameId, { type: "u64" }),
+      new Address(connectedAddress).toScVal(),
+    ]);
+    handleGameOver("Draw", moveHistory);
   };
 
   const handleNewGame = () => {
@@ -339,14 +428,15 @@ export default function KingFallPage() {
     setBTime(600);
     setGamePhase("lobby");
     setPotSize(0n);
+    setGameId(null);
+    setDrawOffered(false);
   };
 
   if (!mounted) return null;
 
-  const playerColor: Color = "w"; // local player always plays white in this demo
-  const isMyTurn = currentTurn === playerColor;
+  const playerColor: Color = "w";
+  const isMyTurn            = currentTurn === playerColor;
 
-  // ─── RENDER ──────────────────────────────────────────────────────────────────
   return (
     <div
       className="min-h-screen text-zinc-200 selection:bg-amber-500/30 overflow-x-hidden"
@@ -355,11 +445,9 @@ export default function KingFallPage() {
         fontFamily: "'Courier New', Courier, monospace",
       }}
     >
-      {/* Ambient top glow */}
       <div className="fixed inset-x-0 top-0 h-72 opacity-20 pointer-events-none"
         style={{ background: "radial-gradient(ellipse 60% 100% at 50% 0%, #d97706, transparent)" }} />
 
-      {/* Grain texture overlay */}
       <div className="fixed inset-0 opacity-[0.025] pointer-events-none"
         style={{
           backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E")`,
@@ -369,16 +457,20 @@ export default function KingFallPage() {
 
       <div className="relative max-w-5xl mx-auto px-4 py-8 pb-32">
 
-        {/* ── Header ── */}
+        {/* Header */}
         <header className="flex items-center justify-between mb-8">
- 
-
           {connectedAddress && (
             <div className="flex items-center gap-2 px-3 py-2 border border-zinc-800 rounded-xl bg-zinc-900/40 backdrop-blur">
               <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
               <span className="text-[10px] text-zinc-400 tracking-wider">{formatAddress(connectedAddress)}</span>
               <span className="text-[10px] text-zinc-600">·</span>
               <span className="text-[10px] text-amber-400 font-bold">{xlmBalance} XLM</span>
+            </div>
+          )}
+          {gameId && (
+            <div className="flex items-center gap-2 px-3 py-2 border border-zinc-800 rounded-xl bg-zinc-900/40 backdrop-blur">
+              <span className="text-[10px] text-zinc-600 uppercase tracking-widest">Game</span>
+              <span className="text-[10px] text-amber-400 font-black">#{gameId.toString()}</span>
             </div>
           )}
         </header>
@@ -389,7 +481,6 @@ export default function KingFallPage() {
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
             className="max-w-lg mx-auto space-y-5"
           >
-            {/* Hero */}
             <div className="text-center space-y-3 py-6">
               <div className="text-7xl mb-4" style={{ filter: "drop-shadow(0 0 30px rgba(217,119,6,0.4))" }}>♚</div>
               <h2 className="text-3xl font-bold text-white tracking-wider">
@@ -402,12 +493,10 @@ export default function KingFallPage() {
 
             {connectedAddress ? (
               <>
-                {/* Stake config */}
                 <div className="border border-zinc-800 rounded-2xl p-6 space-y-5 bg-zinc-900/30 backdrop-blur">
                   <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
                     <Coins size={12} className="text-amber-400" /> Set Your Stake
                   </h3>
-
                   <div className="grid grid-cols-4 gap-2">
                     {["1", "5", "10", "25"].map(v => (
                       <button
@@ -423,44 +512,36 @@ export default function KingFallPage() {
                       </button>
                     ))}
                   </div>
-
                   <div className="flex gap-3 items-center">
-                    <div className="relative flex-1">
-                      <input
-                        type="number"
-                        value={stakeAmount}
-                        onChange={e => setStakeAmount(e.target.value)}
-                        className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-lg font-bold outline-none focus:border-amber-500/50 transition-colors"
-                      />
-                    </div>
+                    <input
+                      type="number"
+                      value={stakeAmount}
+                      onChange={e => setStakeAmount(e.target.value)}
+                      className="flex-1 bg-black border border-zinc-800 rounded-xl px-4 py-3 text-lg font-bold outline-none focus:border-amber-500/50 transition-colors"
+                    />
                     <span className="text-zinc-500 font-bold text-sm">XLM</span>
                   </div>
-
                   <div className="flex items-center justify-between text-[10px] text-zinc-600 pt-1">
-                    <span>Pot size if matched: <span className="text-amber-400 font-bold">{(parseFloat(stakeAmount || "0") * 2).toFixed(2)} XLM</span></span>
-                    <span>Fee: <span className="text-zinc-500">2%</span></span>
+                    <span>Pot if matched: <span className="text-amber-400 font-bold">{(parseFloat(stakeAmount || "0") * 2).toFixed(2)} XLM</span></span>
+                    <span>Protocol fee: <span className="text-zinc-500">1.5%</span></span>
                   </div>
                 </div>
 
-                {/* Game code */}
                 <div className="border border-zinc-800 rounded-2xl p-6 space-y-4 bg-zinc-900/20">
                   <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
                     <Users size={12} className="text-amber-400" /> Matchmaking
                   </h3>
-
                   <div className="grid grid-cols-2 gap-3">
-                    {/* My code */}
                     <div className="space-y-2">
                       <p className="text-[9px] text-zinc-600 uppercase tracking-widest">Your game code</p>
                       <div className="flex items-center gap-2 px-3 py-2.5 bg-black border border-zinc-800 rounded-xl">
                         <span className="text-amber-400 font-black tracking-[0.3em] text-sm flex-1">{myGameCode}</span>
-                        <button onClick={handleCopyCode} className="text-zinc-600 hover:text-amber-400 transition-colors">
+                        <button onClick={() => { navigator.clipboard.writeText(myGameCode); setCodeCopied(true); setTimeout(() => setCodeCopied(false), 2000); }}
+                          className="text-zinc-600 hover:text-amber-400 transition-colors">
                           {codeCopied ? <CheckCheck size={14} className="text-emerald-400" /> : <Copy size={14} />}
                         </button>
                       </div>
                     </div>
-
-                    {/* Join code */}
                     <div className="space-y-2">
                       <p className="text-[9px] text-zinc-600 uppercase tracking-widest">Join opponent</p>
                       <input
@@ -475,22 +556,16 @@ export default function KingFallPage() {
                   </div>
                 </div>
 
-                {/* Start button */}
                 <button
                   onClick={handleStakeAndStart}
                   disabled={loading || !stakeAmount || parseFloat(stakeAmount) <= 0}
                   className="w-full py-5 rounded-2xl font-black tracking-[0.2em] uppercase text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98] flex items-center justify-center gap-3"
-                  style={{
-                    background: "linear-gradient(135deg, #d97706, #b45309)",
-                    boxShadow: "0 0 40px -10px rgba(217,119,6,0.5)",
-                    color: "#000",
-                  }}
+                  style={{ background: "linear-gradient(135deg, #d97706, #b45309)", boxShadow: "0 0 40px -10px rgba(217,119,6,0.5)", color: "#000" }}
                 >
-                  {loading ? (
-                    <><RotateCcw size={18} className="animate-spin" /> Locking Stake...</>
-                  ) : (
-                    <><Swords size={18} /> Stake & Play · {stakeAmount} XLM</>
-                  )}
+                  {loading
+                    ? <><RotateCcw size={18} className="animate-spin" /> Locking Stake...</>
+                    : <><Swords size={18} /> Stake & Play · {stakeAmount} XLM</>
+                  }
                 </button>
               </>
             ) : (
@@ -500,7 +575,6 @@ export default function KingFallPage() {
               </div>
             )}
 
-            {/* Stats bar */}
             <div className="grid grid-cols-3 gap-3 pt-2">
               {[
                 { label: "Active Games", value: "12", icon: Swords },
@@ -521,10 +595,9 @@ export default function KingFallPage() {
         {(gamePhase === "playing" || gamePhase === "ended") && (
           <div className="flex flex-col lg:flex-row gap-6 items-start justify-center">
 
-            {/* ── Board Column ── */}
             <div className="flex flex-col items-center gap-3 w-full lg:w-auto">
 
-              {/* Black player / timer */}
+              {/* Black player */}
               <div className={`w-full max-w-[480px] flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
                 currentTurn === "b" && gamePhase === "playing"
                   ? "border-amber-500/40 bg-amber-500/5 shadow-[0_0_20px_-5px_rgba(217,119,6,0.2)]"
@@ -534,7 +607,7 @@ export default function KingFallPage() {
                   <div className="text-2xl">♛</div>
                   <div>
                     <p className="text-xs font-bold text-zinc-300">Opponent</p>
-                    <p className="text-[9px] text-zinc-600">Black · {formatAddress(connectedAddress || "GZZZZZZZZZZZZZZZZZZZZZZZ")}</p>
+                    <p className="text-[9px] text-zinc-600">Black</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -554,15 +627,7 @@ export default function KingFallPage() {
               </div>
 
               {/* Chess Board */}
-              <div
-                className="relative"
-                style={{
-                  borderRadius: "12px",
-                  overflow: "hidden",
-                  boxShadow: "0 0 80px -20px rgba(0,0,0,0.8), 0 0 40px -10px rgba(217,119,6,0.15), inset 0 0 0 2px rgba(255,255,255,0.04)",
-                }}
-              >
-                {/* Rank labels */}
+              <div className="relative" style={{ borderRadius: "12px", overflow: "hidden", boxShadow: "0 0 80px -20px rgba(0,0,0,0.8), 0 0 40px -10px rgba(217,119,6,0.15), inset 0 0 0 2px rgba(255,255,255,0.04)" }}>
                 <div className="absolute left-0 top-0 bottom-0 w-5 flex flex-col pointer-events-none z-10">
                   {Array.from({ length: 8 }, (_, i) => (
                     <div key={i} className="flex-1 flex items-center justify-center">
@@ -570,16 +635,15 @@ export default function KingFallPage() {
                     </div>
                   ))}
                 </div>
-
                 <div className="ml-5 mb-4">
                   {board.map((row, rIdx) => (
                     <div key={rIdx} className="flex">
                       {row.map((piece, cIdx) => {
-                        const isLight = (rIdx + cIdx) % 2 === 0;
-                        const isSelected = selected?.row === rIdx && selected?.col === cIdx;
-                        const isValidTarget = validMoves.some(m => m.row === rIdx && m.col === cIdx);
+                        const isLight        = (rIdx + cIdx) % 2 === 0;
+                        const isSelected     = selected?.row === rIdx && selected?.col === cIdx;
+                        const isValidTarget  = validMoves.some(m => m.row === rIdx && m.col === cIdx);
                         const isLastMoveFrom = lastMove?.from.row === rIdx && lastMove?.from.col === cIdx;
-                        const isLastMoveTo = lastMove?.to.row === rIdx && lastMove?.to.col === cIdx;
+                        const isLastMoveTo   = lastMove?.to.row === rIdx && lastMove?.to.col === cIdx;
 
                         let bg = isLight ? "#c8a97e" : "#8b6340";
                         if (isSelected) bg = "#f0c040";
@@ -592,26 +656,17 @@ export default function KingFallPage() {
                             className="relative w-14 h-14 flex items-center justify-center transition-all group"
                             style={{ background: bg }}
                           >
-                            {/* Valid move dot / capture ring */}
                             {isValidTarget && (
-                              piece ? (
-                                <div className="absolute inset-0.5 rounded-sm border-[3px] border-black/30 pointer-events-none" />
-                              ) : (
-                                <div className="absolute w-4 h-4 rounded-full bg-black/25 pointer-events-none" />
-                              )
+                              piece
+                                ? <div className="absolute inset-0.5 rounded-sm border-[3px] border-black/30 pointer-events-none" />
+                                : <div className="absolute w-4 h-4 rounded-full bg-black/25 pointer-events-none" />
                             )}
-
-                            {/* Piece */}
                             {piece && (
                               <span
-                                className={`text-3xl select-none transition-transform group-hover:scale-110 ${
-                                  piece.color === "w" ? "drop-shadow-[1px_1px_0px_rgba(0,0,0,0.6)]" : "drop-shadow-[1px_1px_0px_rgba(255,255,255,0.15)]"
-                                }`}
+                                className="text-3xl select-none transition-transform group-hover:scale-110"
                                 style={{
                                   color: piece.color === "w" ? "#fff" : "#1a1a1a",
-                                  textShadow: piece.color === "w"
-                                    ? "0 1px 3px rgba(0,0,0,0.7)"
-                                    : "0 1px 2px rgba(255,255,255,0.2)",
+                                  textShadow: piece.color === "w" ? "0 1px 3px rgba(0,0,0,0.7)" : "0 1px 2px rgba(255,255,255,0.2)",
                                   lineHeight: 1,
                                 }}
                               >
@@ -623,8 +678,6 @@ export default function KingFallPage() {
                       })}
                     </div>
                   ))}
-
-                  {/* File labels */}
                   <div className="flex h-4">
                     {"abcdefgh".split("").map(f => (
                       <div key={f} className="w-14 flex items-center justify-center">
@@ -635,7 +688,7 @@ export default function KingFallPage() {
                 </div>
               </div>
 
-              {/* White player / timer */}
+              {/* White player */}
               <div className={`w-full max-w-[480px] flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
                 currentTurn === "w" && gamePhase === "playing"
                   ? "border-amber-500/40 bg-amber-500/5 shadow-[0_0_20px_-5px_rgba(217,119,6,0.2)]"
@@ -665,7 +718,7 @@ export default function KingFallPage() {
               </div>
             </div>
 
-            {/* ── Sidebar ── */}
+            {/* Sidebar */}
             <div className="flex flex-col gap-4 w-full lg:w-64">
 
               {/* Pot */}
@@ -677,7 +730,7 @@ export default function KingFallPage() {
                   {potSize > 0n ? stroopsToXlm(potSize) : (parseFloat(stakeAmount || "0") * 2).toFixed(2)}
                   <span className="text-sm text-amber-600 ml-2 font-bold">XLM</span>
                 </p>
-                <p className="text-[9px] text-zinc-600 mt-1">Winner takes 98% · 2% protocol fee</p>
+                <p className="text-[9px] text-zinc-600 mt-1">Winner takes 98.5% · 1.5% protocol fee</p>
               </div>
 
               {/* Status */}
@@ -696,6 +749,11 @@ export default function KingFallPage() {
                       {currentTurn === "w" ? "White" : "Black"} to play
                     </span>
                   </p>
+                  {gameId && (
+                    <p className="text-[9px] text-zinc-700 mt-2">
+                      On-chain game <span className="text-amber-600">#{gameId.toString()}</span>
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -725,30 +783,35 @@ export default function KingFallPage() {
               {gamePhase === "playing" && (
                 <div className="grid grid-cols-2 gap-2">
                   <button
-                    onClick={() => {}}
-                    className="flex items-center justify-center gap-1.5 py-3 rounded-xl border border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-700 transition-all text-[10px] font-bold tracking-wider uppercase"
+                    onClick={drawOffered ? handleAcceptDraw : handleOfferDraw}
+                    disabled={loading}
+                    className={`flex items-center justify-center gap-1.5 py-3 rounded-xl border transition-all text-[10px] font-bold tracking-wider uppercase disabled:opacity-40 ${
+                      drawOffered
+                        ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/5"
+                        : "border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-700"
+                    }`}
                   >
-                    <Handshake size={13} /> Draw
+                    <Handshake size={13} /> {drawOffered ? "Accept" : "Draw"}
                   </button>
                   <button
                     onClick={handleResign}
-                    className="flex items-center justify-center gap-1.5 py-3 rounded-xl border border-rose-500/20 text-rose-500/70 hover:text-rose-400 hover:border-rose-500/40 transition-all text-[10px] font-bold tracking-wider uppercase"
+                    disabled={loading}
+                    className="flex items-center justify-center gap-1.5 py-3 rounded-xl border border-rose-500/20 text-rose-500/70 hover:text-rose-400 hover:border-rose-500/40 transition-all text-[10px] font-bold tracking-wider uppercase disabled:opacity-40"
                   >
                     <Flag size={13} /> Resign
                   </button>
                 </div>
               )}
 
-              {/* Contract */}
+              {/* Contract link */}
               <div className="border border-zinc-800/50 rounded-xl p-3">
                 <p className="text-[9px] text-zinc-700 uppercase tracking-widest mb-1">Escrow Contract</p>
                 <a
-                  href={`https://stellar.expert/explorer/testnet/contract/${KINGFALL_CONTRACT_ID}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href={`https://stellar.expert/explorer/testnet/contract/${ESCROW_CONTRACT_ID}`}
+                  target="_blank" rel="noopener noreferrer"
                   className="text-[10px] font-mono text-zinc-600 hover:text-amber-400 transition-colors flex items-center gap-1"
                 >
-                  {formatAddress(KINGFALL_CONTRACT_ID)} <ExternalLink size={9} />
+                  {formatAddress(ESCROW_CONTRACT_ID)} <ExternalLink size={9} />
                 </a>
               </div>
             </div>
@@ -773,18 +836,29 @@ export default function KingFallPage() {
                 <div>
                   <p className="text-[10px] text-amber-600 uppercase tracking-[0.3em] mb-2">Game Over</p>
                   <h2 className="text-3xl font-black text-white">
-                    {winner === "draw" ? "Draw!" : winner === playerColor ? (
-                      <><span className="text-amber-400">Victory</span> is yours</>
-                    ) : "You lost"}
+                    {winner === "draw" ? "Draw!" : winner === playerColor
+                      ? <><span className="text-amber-400">Victory</span> is yours</>
+                      : "You lost"
+                    }
                   </h2>
                   <p className="text-zinc-500 text-sm mt-2">
-                    {winner !== "draw" && winner === playerColor
-                      ? `${stroopsToXlm(potSize > 0n ? potSize : xlmToStroops(String(parseFloat(stakeAmount)*2)))} XLM will be sent to your wallet`
-                      : winner !== "draw" ? "Better luck next time"
-                      : "Stakes returned proportionally"}
+                    {winner === "draw"
+                      ? "Stakes returned proportionally"
+                      : winner === playerColor
+                        ? `${stroopsToXlm(potSize * 985n / 1000n)} XLM sent to your wallet`
+                        : "Better luck next time"
+                    }
                   </p>
+                  {txStatus?.hash && (
+                    <a
+                      href={`https://stellar.expert/explorer/testnet/tx/${txStatus.hash}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[10px] text-amber-600/70 hover:text-amber-400 mt-2 transition-colors"
+                    >
+                      View transaction <ExternalLink size={9} />
+                    </a>
+                  )}
                 </div>
-
                 <div className="flex gap-3 pt-2">
                   <button
                     onClick={handleNewGame}
@@ -804,19 +878,16 @@ export default function KingFallPage() {
             </motion.div>
           )}
         </AnimatePresence>
-
       </div>
 
-   
-
-      {/* ── TX Status Toast ── */}
+      {/* TX Toast */}
       <AnimatePresence>
         {txStatus && (
           <motion.div
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
             className={`fixed bottom-28 left-1/2 -translate-x-1/2 w-full max-w-sm mx-4 p-4 rounded-2xl flex items-center justify-between gap-4 border z-50 backdrop-blur ${
               txStatus.type === "success" ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
-              : txStatus.type === "error" ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
+              : txStatus.type === "error"   ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
               : "bg-zinc-800/50 border-zinc-700/30 text-zinc-300"
             }`}
           >
