@@ -4,9 +4,10 @@ import { WalletProvider } from "./contexts/WalletContext";
 import WalletConnection from "./components/WalletConnection";
 import Link from "next/link";
 import { Crown } from "lucide-react";
+import { Suspense } from "react";
 
 export const metadata: Metadata = {
-  title: "STELLAR LAUNCHPAD",
+  title: "KINGFALL",
   description: "Decentralized token launchpad on Stellar Soroban",
 };
 
@@ -64,33 +65,19 @@ export default function RootLayout({
         <WalletProvider>
           <div className="min-h-screen flex">
 
-            {/* ── LEFT SIDEBAR ── */}
             <aside className="fixed top-0 left-0 h-screen w-64 z-50 flex flex-col bg-[#040407]/90 backdrop-blur-xl border-r border-zinc-800/50">
 
-              {/* Logo */}
-                     {/* ── Header ── */}
-        <header className="flex items-center justify-between mb-8 p-4">
-          <div className="flex items-center gap-3">
-            <Crown size={26} className="text-amber-400" style={{ filter: "drop-shadow(0 0 8px #d97706)" }} />
-            <div>
-              <h1 className="text-2xl font-bold tracking-[0.2em] text-white uppercase">
-                King<span className="text-amber-400">Fall</span>
-              </h1>
-            </div>
-          </div>
+              <header className="flex items-center justify-between mb-8 p-4">
+                <div className="flex items-center gap-3">
+                  <Crown size={26} className="text-amber-400" style={{ filter: "drop-shadow(0 0 8px #d97706)" }} />
+                  <div>
+                    <h1 className="text-2xl font-bold tracking-[0.2em] text-white uppercase">
+                      King<span className="text-amber-400">Fall</span>
+                    </h1>
+                  </div>
+                </div>
+              </header>
 
-          {/* {connectedAddress && (
-            <div className="flex items-center gap-2 px-3 py-2 border border-zinc-800 rounded-xl bg-zinc-900/40 backdrop-blur">
-              <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-              <span className="text-[10px] text-zinc-400 tracking-wider">{formatAddress(connectedAddress)}</span>
-              <span className="text-[10px] text-zinc-600">·</span>
-              <span className="text-[10px] text-amber-400 font-bold">{xlmBalance} XLM</span>
-            </div>
-          )} */}
-        </header>
-
- 
-              {/* Nav items */}
               <nav className="flex-1 px-3 mt-6 flex flex-col gap-1">
                 {navItems.map((item) => (
                   <Link
@@ -111,15 +98,15 @@ export default function RootLayout({
                 ))}
               </nav>
 
-              {/* Wallet at the bottom */}
               <div className="px-4 py-5 border-t border-zinc-800/50 flex justify-start">
-              <WalletConnection />
+                <WalletConnection />
               </div>
             </aside>
 
-            {/* ── MAIN CONTENT (offset by sidebar width) ── */}
             <main className="flex-1 ml-64 overflow-x-hidden min-h-screen">
-              {children}
+              <Suspense>
+                {children}
+              </Suspense>
             </main>
 
           </div>

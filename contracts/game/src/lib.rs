@@ -6,9 +6,10 @@ use soroban_sdk::{
 
 #[contracttype]
 pub enum DataKey {
-    Game(u64),   
-    NextId,        
+    Game(u64),
+    NextId,
     EscrowContract,
+    AllGames,
 }
 
 #[derive(Clone, PartialEq)]
@@ -29,52 +30,48 @@ pub enum GameOutcome {
     Undecided,
 }
 
-// Moves are stored in Standard Algebraic Notation (SAN), e.g. "e4", "Nf3", "O-O"
-// `committed_at` is the ledger timestamp used for timeout enforcement.
-
 #[derive(Clone)]
 #[contracttype]
 pub struct MoveRecord {
     pub player:       Address,
-    pub san:          String,  
-    pub move_number:  u32,       
-    pub committed_at: u64,  
+    pub san:          String,
+    pub move_number:  u32,
+    pub fen_after:    String,
+    pub committed_at: u64,
 }
 
 #[derive(Clone)]
 #[contracttype]
 pub struct GameState {
-    pub game_id:       u64,
-    pub white:         Address,
-    pub black:         Address,
-    pub phase:         GamePhase,
-    pub outcome:       GameOutcome,
-    pub moves:         Vec<MoveRecord>,
-    pub move_timeout:  u64,      // seconds a player has to move (0 = no timeout)
-    pub created_at:    u64,
-    pub last_move_at:  u64,
-    pub pgn_hash:      String,   // SHA-256 of full PGN, committed on completion
-    pub escrow_id:     u64,      // corresponding escrow game_id for cross-contract link
+    pub game_id:      u64,
+    pub white:        Address,
+    pub black:        Address,
+    pub phase:        GamePhase,
+    pub outcome:      GameOutcome,
+    pub moves:        Vec<MoveRecord>,
+    pub current_fen:  String,
+    pub move_timeout: u64,
+    pub created_at:   u64,
+    pub last_move_at: u64,
+    pub pgn_hash:     String,
+    pub escrow_id:    u64,
 }
+
+const STARTING_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 #[contract]
 pub struct KingFallGame;
 
 #[contractimpl]
 impl KingFallGame {
+
     pub fn initialize(env: Env, escrow_contract: Address) {
         assert!(
             !env.storage().instance().has(&DataKey::EscrowContract),
             "already initialized"
         );
-        env.storage()
-            .instance()
-            .set(&DataKey::EscrowContract, &escrow_contract);
+        env.storage().instance().set(&DataKey::EscrowContract, &escrow_contract);
     }
-
-    // Called after both players have staked in the escrow contract.
-    // `escrow_id` links this game record to the corresponding escrow entry.
-    // `move_timeout` = 0 means no per-move clock.
 
     pub fn create_game(
         env:          Env,
@@ -84,10 +81,9 @@ impl KingFallGame {
         move_timeout: u64,
     ) -> u64 {
         white.require_auth();
-
         assert!(white != black, "players must be different");
 
-        let id = Self::next_id(&env);
+        let id  = Self::next_id(&env);
         let now = env.ledger().timestamp();
 
         let state = GameState {
@@ -97,6 +93,7 @@ impl KingFallGame {
             phase:        GamePhase::Active,
             outcome:      GameOutcome::Undecided,
             moves:        Vec::new(&env),
+            current_fen:  String::from_str(&env, STARTING_FEN),
             move_timeout,
             created_at:   now,
             last_move_at: now,
@@ -105,6 +102,7 @@ impl KingFallGame {
         };
 
         env.storage().instance().set(&DataKey::Game(id), &state);
+        Self::index_all(&env, id);
 
         env.events().publish(
             (symbol_short!("kfg"), symbol_short!("created"), id),
@@ -114,16 +112,17 @@ impl KingFallGame {
         id
     }
 
-    // Either player submits their move in SAN.
-    // Enforces turn order white moves on odd half-moves (1,3,5..),
-    // black on even (2,4,6..).
-    // If move_timeout is set, rejects a move submitted after the window.
+    // commit_move records a move onchain.
+    // fen_after: the FEN string of the board after this move (computed client-side).
+    // Either player must call this for each move — both white and black.
+    // Turn order is enforced: white on even half-moves, black on odd.
 
     pub fn commit_move(
-        env:    Env,
-        id:     u64,
-        player: Address,
-        san:    String,
+        env:       Env,
+        id:        u64,
+        player:    Address,
+        san:       String,
+        fen_after: String,
     ) {
         player.require_auth();
 
@@ -135,50 +134,33 @@ impl KingFallGame {
             "not a player"
         );
 
-        let total_half_moves = state.moves.len();
+        let total = state.moves.len();
+        let expected = if total % 2 == 0 { state.white.clone() } else { state.black.clone() };
+        assert!(player == expected, "not your turn");
 
-        // White moves on half-moves 0, 2, 4 ... (even index)
-        // Black moves on half-moves 1, 3, 5 ... (odd index)
-        let expected_player = if total_half_moves % 2 == 0 {
-            state.white.clone()
-        } else {
-            state.black.clone()
-        };
-        assert!(player == expected_player, "not your turn");
-
-        // Enforce per-move timeout
         let now = env.ledger().timestamp();
         if state.move_timeout > 0 {
-            assert!(
-                now <= state.last_move_at + state.move_timeout,
-                "move timeout exceeded — use claim_abandonment"
-            );
+            assert!(now <= state.last_move_at + state.move_timeout, "move timeout exceeded");
         }
 
-        let move_number = (total_half_moves / 2) + 1;
+        let move_number = (total / 2) + 1;
 
-        let record = MoveRecord {
-            player: player.clone(),
-            san: san.clone(),
+        state.moves.push_back(MoveRecord {
+            player:       player.clone(),
+            san:          san.clone(),
             move_number,
+            fen_after:    fen_after.clone(),
             committed_at: now,
-        };
-
-        state.moves.push_back(record);
+        });
+        state.current_fen  = fen_after.clone();
         state.last_move_at = now;
         env.storage().instance().set(&DataKey::Game(id), &state);
 
         env.events().publish(
             (symbol_short!("kfg"), symbol_short!("move"), id),
-            (player, san, move_number),
+            (player, san, move_number, fen_after),
         );
     }
-
-    // Either player submits the final outcome + SHA-256 hash of the full PGN.
-    // This transitions the game to Completed and the frontend then calls
-    // finish_game on the escrow contract with the same pgn_hash.
-    //
-    // Both players must agree on the outcome (or use resign for a unilateral end).
 
     pub fn complete_game(
         env:      Env,
@@ -199,12 +181,8 @@ impl KingFallGame {
         pgn_hash: String,
     ) {
         let mut state: GameState = Self::load_game(&env, id);
-
         assert!(state.phase == GamePhase::Active, "game not active");
-        assert!(
-            caller == state.white || caller == state.black,
-            "not a player"
-        );
+        assert!(caller == state.white || caller == state.black, "not a player");
         assert!(outcome != GameOutcome::Undecided, "must submit a real outcome");
 
         state.phase    = GamePhase::Completed;
@@ -218,94 +196,39 @@ impl KingFallGame {
         );
     }
 
-    // A player unilaterally resigns so opponent wins immediately.
-    // Convenience wrapper around complete_game.
-
     pub fn resign(env: Env, id: u64, caller: Address) {
         caller.require_auth();
-
         let state: GameState = Self::load_game(&env, id);
-
         assert!(state.phase == GamePhase::Active, "game not active");
-        assert!(
-            caller == state.white || caller == state.black,
-            "not a player"
-        );
+        assert!(caller == state.white || caller == state.black, "not a player");
 
-        let outcome = if caller == state.white {
-            GameOutcome::BlackWins
-        } else {
-            GameOutcome::WhiteWins
-        };
-
-        Self::complete_game_internal(
-            env,
-            id,
-            caller,
-            outcome,
-            String::from_str(&state.white.env(), "resign"),
-        );
+        let outcome = if caller == state.white { GameOutcome::BlackWins } else { GameOutcome::WhiteWins };
+        Self::complete_game_internal(env, id, caller, outcome, String::from_str(&state.white.env(), "resign"));
     }
-
-    // Called by the escrow contract after it has paid out, to mark this
-    // game record as fully settled onchain.
-    // Auth: only the registered escrow contract may call this.
 
     pub fn mark_settled(env: Env, id: u64) {
-        let escrow: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::EscrowContract)
-            .expect("not initialized");
-
+        let escrow: Address = env.storage().instance().get(&DataKey::EscrowContract).expect("not initialized");
         escrow.require_auth();
-
         let mut state: GameState = Self::load_game(&env, id);
         assert!(state.phase == GamePhase::Completed, "game not completed");
-
         state.phase = GamePhase::Settled;
         env.storage().instance().set(&DataKey::Game(id), &state);
-
-        env.events().publish(
-            (symbol_short!("kfg"), symbol_short!("settled"), id),
-            state.escrow_id,
-        );
+        env.events().publish((symbol_short!("kfg"), symbol_short!("settled"), id), state.escrow_id);
     }
-
-    // If the opponent hasn't moved within move_timeout seconds,
-    // the waiting player can mark the game Abandoned and claim via escrow.
 
     pub fn claim_abandonment(env: Env, id: u64, caller: Address) {
         caller.require_auth();
-
         let mut state: GameState = Self::load_game(&env, id);
-
         assert!(state.phase == GamePhase::Active, "game not active");
-        assert!(
-            caller == state.white || caller == state.black,
-            "not a player"
-        );
+        assert!(caller == state.white || caller == state.black, "not a player");
         assert!(state.move_timeout > 0, "no move timeout set");
-        assert!(
-            env.ledger().timestamp() > state.last_move_at + state.move_timeout,
-            "timeout not reached"
-        );
+        assert!(env.ledger().timestamp() > state.last_move_at + state.move_timeout, "timeout not reached");
 
-        // The caller is the one who waited, opponent forfeits
-        let outcome = if caller == state.white {
-            GameOutcome::WhiteWins
-        } else {
-            GameOutcome::BlackWins
-        };
-
+        let outcome = if caller == state.white { GameOutcome::WhiteWins } else { GameOutcome::BlackWins };
         state.phase   = GamePhase::Abandoned;
         state.outcome = outcome.clone();
         env.storage().instance().set(&DataKey::Game(id), &state);
-
-        env.events().publish(
-            (symbol_short!("kfg"), symbol_short!("abandoned"), id),
-            (caller, outcome),
-        );
+        env.events().publish((symbol_short!("kfg"), symbol_short!("abandoned"), id), (caller, outcome));
     }
 
     // ── READS ──
@@ -322,22 +245,23 @@ impl KingFallGame {
         Self::load_game(&env, id).moves.len()
     }
 
+    pub fn get_current_fen(env: Env, id: u64) -> String {
+        Self::load_game(&env, id).current_fen
+    }
+
     pub fn get_turn(env: Env, id: u64) -> Address {
         let state = Self::load_game(&env, id);
-        if state.moves.len() % 2 == 0 {
-            state.white
-        } else {
-            state.black
-        }
+        if state.moves.len() % 2 == 0 { state.white } else { state.black }
+    }
+
+    pub fn get_all_games(env: Env) -> Vec<u64> {
+        env.storage().instance().get(&DataKey::AllGames).unwrap_or(Vec::new(&env))
     }
 
     // ── Private ──
 
     fn load_game(env: &Env, id: u64) -> GameState {
-        env.storage()
-            .instance()
-            .get(&DataKey::Game(id))
-            .expect("game not found")
+        env.storage().instance().get(&DataKey::Game(id)).expect("game not found")
     }
 
     fn next_id(env: &Env) -> u64 {
@@ -346,5 +270,11 @@ impl KingFallGame {
         id += 1;
         env.storage().instance().set(&key, &id);
         id
+    }
+
+    fn index_all(env: &Env, id: u64) {
+        let mut list: Vec<u64> = env.storage().instance().get(&DataKey::AllGames).unwrap_or(Vec::new(env));
+        list.push_back(id);
+        env.storage().instance().set(&DataKey::AllGames, &list);
     }
 }

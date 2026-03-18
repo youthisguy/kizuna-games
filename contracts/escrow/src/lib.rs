@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env, String};
+use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env, String, Vec};
 
 mod events;
 
@@ -19,6 +19,8 @@ pub enum DataKey {
     Game(u64),
     NextId,
     PayoutContract,
+    ActiveGames,
+    PlayerGames(Address),
 }
 
 #[derive(Clone, PartialEq)]
@@ -43,6 +45,7 @@ pub enum Outcome {
 #[derive(Clone)]
 #[contracttype]
 pub struct GameData {
+    pub id: u64,
     pub white: Address,
     pub black: Address,
     pub stake: i128,
@@ -83,6 +86,7 @@ impl KingFallEscrow {
         token::Client::new(&env, &token).transfer(&white, &contract, &stake);
         let id = Self::next_id(&env);
         let data = GameData {
+            id,
             white: white.clone(),
             black: white.clone(),
             stake,
@@ -94,6 +98,8 @@ impl KingFallEscrow {
             draw_offered_by: None,
         };
         env.storage().instance().set(&DataKey::Game(id), &data);
+        Self::index_active(&env, id);
+        Self::index_player(&env, &white, id);
         events::game_created(&env, id, white, stake, join_deadline);
         id
     }
@@ -114,6 +120,8 @@ impl KingFallEscrow {
         data.black = black.clone();
         data.status = GameStatus::Active;
         env.storage().instance().set(&DataKey::Game(id), &data);
+        Self::remove_active(&env, id);
+        Self::index_player(&env, &black, id);
         events::game_joined(&env, id, black);
     }
 
@@ -232,15 +240,10 @@ impl KingFallEscrow {
     pub fn cancel_game(env: Env, id: u64) {
         let mut data: GameData = Self::load_game(&env, id);
         data.white.require_auth();
-        assert!(data.status == GameStatus::Waiting, "game not waiting");
-        if data.join_deadline > 0 {
-            assert!(
-                env.ledger().timestamp() > data.join_deadline,
-                "deadline not yet passed"
-            );
-        }
+        assert!(data.status == GameStatus::Waiting, "can only cancel a waiting game");
         data.status = GameStatus::Cancelled;
         env.storage().instance().set(&DataKey::Game(id), &data);
+        Self::remove_active(&env, id);
         let client = token::Client::new(&env, &data.token);
         let contract = env.current_contract_address();
         client.transfer(&contract, &data.white, &data.stake);
@@ -283,6 +286,20 @@ impl KingFallEscrow {
         }
     }
 
+    pub fn get_active_games(env: Env) -> Vec<u64> {
+        env.storage()
+            .instance()
+            .get(&DataKey::ActiveGames)
+            .unwrap_or(Vec::new(&env))
+    }
+
+    pub fn get_player_games(env: Env, player: Address) -> Vec<u64> {
+        env.storage()
+            .instance()
+            .get(&DataKey::PlayerGames(player))
+            .unwrap_or(Vec::new(&env))
+    }
+
     fn load_game(env: &Env, id: u64) -> GameData {
         env.storage()
             .instance()
@@ -296,5 +313,39 @@ impl KingFallEscrow {
         id += 1;
         env.storage().instance().set(&key, &id);
         id
+    }
+
+    fn index_active(env: &Env, id: u64) {
+        let mut list: Vec<u64> = env
+            .storage()
+            .instance()
+            .get(&DataKey::ActiveGames)
+            .unwrap_or(Vec::new(env));
+        list.push_back(id);
+        env.storage().instance().set(&DataKey::ActiveGames, &list);
+    }
+
+    fn remove_active(env: &Env, id: u64) {
+        let list: Vec<u64> = env
+            .storage()
+            .instance()
+            .get(&DataKey::ActiveGames)
+            .unwrap_or(Vec::new(env));
+        let mut updated: Vec<u64> = Vec::new(env);
+        for item in list.iter() {
+            if item != id { updated.push_back(item); }
+        }
+        env.storage().instance().set(&DataKey::ActiveGames, &updated);
+    }
+
+    fn index_player(env: &Env, player: &Address, id: u64) {
+        let key = DataKey::PlayerGames(player.clone());
+        let mut list: Vec<u64> = env
+            .storage()
+            .instance()
+            .get(&key)
+            .unwrap_or(Vec::new(env));
+        list.push_back(id);
+        env.storage().instance().set(&key, &list);
     }
 }
