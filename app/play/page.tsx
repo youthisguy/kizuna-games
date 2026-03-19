@@ -33,6 +33,7 @@ const networkPassphrase  = Networks.TESTNET;
 const STATUS_MAP: Record<number, string> = { 0:"Waiting", 1:"Active", 2:"Finished", 3:"Drawn", 4:"Cancelled", 5:"Timeout" };
 function parseStatus(raw: any): string {
   if (typeof raw === "number") return STATUS_MAP[raw] ?? String(raw);
+  if (Array.isArray(raw)) return String(raw[0]); // e.g. ["Active"] -> "Active"
   if (typeof raw === "object" && raw !== null) return Object.keys(raw)[0];
   return String(raw);
 }

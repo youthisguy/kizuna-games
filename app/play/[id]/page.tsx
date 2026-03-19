@@ -33,6 +33,7 @@ const networkPassphrase  = Networks.TESTNET;
 const STATUS_MAP: Record<number, string> = { 0:"Waiting", 1:"Active", 2:"Finished", 3:"Drawn", 4:"Cancelled", 5:"Timeout" };
 function parseStatus(r: any): string {
   if (typeof r === "number") return STATUS_MAP[r] ?? String(r);
+  if (Array.isArray(r)) return String(r[0]); // e.g. ["Active"] -> "Active"
   if (typeof r === "object" && r !== null) return Object.keys(r)[0];
   return String(r);
 }
@@ -206,11 +207,11 @@ export default function GamePage() {
 
   useEffect(()=>{ if(mounted) loadBalance(); },[loadBalance,mounted]);
 
-  // ── Initial load ──────────────────────────────────────────────────────────
+  // ── Initial load — re-run when wallet connects so playerColor is set correctly
   useEffect(()=>{
     if (!mounted || !escrowId) return;
     loadGameState();
-  },[mounted, escrowId]);
+  },[mounted, escrowId, connectedAddress]);
 
   const loadGameState = async () => {
     if (!escrowId) return;
@@ -218,8 +219,10 @@ export default function GamePage() {
     try {
       // 1. Fetch escrow
       const ed = await simRead(ESCROW_CONTRACT_ID,"get_game",[nativeToScVal(escrowId,{type:"u64"})],connectedAddress||undefined);
+      console.log("[loadGameState] raw escrowData:", JSON.stringify(ed, (k,v)=>typeof v==='bigint'?v.toString():v));
       setEscrowData(ed);
       const status = parseStatus(ed.status);
+      console.log("[loadGameState] parsed status:", status, "raw ed.status:", ed.status);
       setEscrowStatus(status);
       setPotSize(status==="Active"?BigInt(ed.stake)*2n:BigInt(ed.stake));
 
@@ -232,10 +235,20 @@ export default function GamePage() {
       // 3. Fetch game contract state
       try {
         const gd = await simRead(GAME_CONTRACT_ID,"get_game",[nativeToScVal(escrowId,{type:"u64"})],connectedAddress||undefined);
+        console.log("[loadGameState] game contract found, setting gcId:", escrowId.toString());
         setGameContractId(escrowId); // game contract uses same ID as escrow_id
-        const moves: string[] = (gd.moves as any[]).map((m:any)=>typeof m.san==="string"?m.san:String(Object.values(m.san||{})[0]||"")).filter(Boolean);
+        const moves: string[] = (gd.moves as any[]).map((m:any)=>{
+          const s = m.san;
+          if (typeof s === "string") return s;
+          if (Array.isArray(s)) return String(s[0]);
+          if (typeof s === "object" && s !== null) return String(Object.values(s)[0]||"");
+          return String(s||"");
+        }).filter(Boolean);
+        console.log("[loadGameState] moves from game contract:", moves);
         setMoveHistory(moves);
-        const fenStr = typeof gd.current_fen==="string"?gd.current_fen:String(Object.values(gd.current_fen||{})[0]||"");
+        const fenRaw = gd.current_fen;
+        const fenStr = typeof fenRaw==="string"?fenRaw:Array.isArray(fenRaw)?String(fenRaw[0]):String(Object.values(fenRaw||{})[0]||"");
+        console.log("[loadGameState] fenStr:", fenStr);
         if (fenStr && fenStr!=="" && fenStr!=="loading") {
           setBoard(fenToBoard(fenStr));
           setCurrentTurn(moves.length%2===0?"w":"b");
@@ -249,7 +262,8 @@ export default function GamePage() {
           else if (outcome==="Draw") setWinner("draw");
           setEscrowStatus("Finished");
         }
-      } catch {
+      } catch(gcErr) {
+        console.warn("[loadGameState] game contract not found for id:", escrowId?.toString(), gcErr);
         // Game contract record doesn't exist yet — show starting position
       }
     } catch(e) {
@@ -283,17 +297,34 @@ export default function GamePage() {
         if (newStatus!==escrowStatusRef.current) {
           setEscrowStatus(newStatus);
           setEscrowData(ed);
-          if (newStatus==="Active") setPotSize(BigInt(ed.stake)*2n);
+          if (newStatus==="Active") {
+            setPotSize(BigInt(ed.stake)*2n);
+            // Re-determine playerColor now that black is known
+            const addr = connectedRef.current;
+            if (addr) {
+              if (ed.white===addr) setPlayerColor("w");
+              else if (ed.black && ed.black!==ed.white && ed.black===addr) setPlayerColor("b");
+            }
+          }
         }
 
         // Poll game contract for moves when active
         if (newStatus==="Active"||status==="Active") {
           try {
             const gd = await simRead(GAME_CONTRACT_ID,"get_game",[nativeToScVal(pollId,{type:"u64"})],connectedRef.current||undefined);
-            const moves: string[] = (gd.moves as any[]).map((m:any)=>typeof m.san==="string"?m.san:String(Object.values(m.san||{})[0]||"")).filter(Boolean);
+            const moves: string[] = (gd.moves as any[]).map((m:any)=>{
+              const s = m.san;
+              if (typeof s === "string") return s;
+              if (Array.isArray(s)) return String(s[0]);
+              if (typeof s === "object" && s !== null) return String(Object.values(s)[0]||"");
+              return String(s||"");
+            }).filter(Boolean);
+            console.log("[poll] game contract moves:", moves);
             setMoveHistory(prev=>{
               if (moves.length>prev.length) {
-                const fenStr = typeof gd.current_fen==="string"?gd.current_fen:String(Object.values(gd.current_fen||{})[0]||"");
+                const fenRaw = gd.current_fen;
+        const fenStr = typeof fenRaw==="string"?fenRaw:Array.isArray(fenRaw)?String(fenRaw[0]):String(Object.values(fenRaw||{})[0]||"");
+        console.log("[loadGameState] fenStr:", fenStr);
                 if (fenStr&&fenStr!=="") { setBoard(fenToBoard(fenStr)); setCurrentTurn(moves.length%2===0?"w":"b"); }
                 return moves;
               }
@@ -313,8 +344,9 @@ export default function GamePage() {
 
   // ── Chess logic ───────────────────────────────────────────────────────────
   const handleSquareClick = (row: number, col: number) => {
-    if (escrowStatus!=="Active") return;
-    if (currentTurn!==playerColor) return;
+    console.log("[click] escrowStatus:", escrowStatus, "currentTurn:", currentTurn, "playerColor:", playerColor, "isPlayer:", isPlayer);
+    if (escrowStatus!=="Active") { console.log("[click] blocked: not Active"); return; }
+    if (currentTurn!==playerColor) { console.log("[click] blocked: not your turn"); return; }
     if (selected) {
       const isValid=validMoves.some(m=>m.row===row&&m.col===col);
       if (isValid) {
@@ -334,13 +366,16 @@ export default function GamePage() {
         // Commit move onchain
         if (connectedAddress&&walletsKit) {
           const gcId=gameContractId??escrowId;
+          if (!gcId) { console.warn('[commit_move] no gcId'); } else {
           setMovePending(true);
+          console.log("[commit_move] calling with gcId:", gcId.toString(), "san:", san, "player:", connectedAddress);
           sendTx(connectedAddress,walletsKit,GAME_CONTRACT_ID,"commit_move",[
             nativeToScVal(gcId,{type:"u64"}),
             new Address(connectedAddress).toScVal(),
             nativeToScVal(san,{type:"string"}),
             nativeToScVal(fen,{type:"string"}),
-          ],(s)=>{ if(s.type!=="pending") setMovePending(false); }).catch(()=>setMovePending(false));
+          ],(s)=>{ console.log("[commit_move] status:", s); if(s.type!=="pending") setMovePending(false); }).catch((e)=>{ console.error("[commit_move] catch:", e); setMovePending(false); });
+          } // end gcId check
         }
         if(cap?.type==="K") handleGameOver(currentTurn==="w"?"WhiteWins":"BlackWins",newMoves);
         return;
@@ -386,7 +421,10 @@ export default function GamePage() {
   if (!mounted || !escrowId) return null;
 
   const isMyTurn    = currentTurn===playerColor;
-  const isPlayer    = connectedAddress && escrowData && (escrowData.white===connectedAddress||(escrowData.black&&escrowData.black!==escrowData.white&&escrowData.black===connectedAddress));
+  // white is always a player (creator); black is a player once they've joined (black !== white)
+  const isWhitePlayer = connectedAddress && escrowData && escrowData.white === connectedAddress;
+  const isBlackPlayer = connectedAddress && escrowData && escrowData.black && escrowData.black !== escrowData.white && escrowData.black === connectedAddress;
+  const isPlayer      = isWhitePlayer || isBlackPlayer;
   const flipped     = playerColor==="b";
   const opColor: Color = playerColor==="w"?"b":"w";
   const stakeXlm    = escrowData ? (Number(escrowData.stake)/10_000_000).toFixed(2) : "0";
@@ -589,6 +627,21 @@ export default function GamePage() {
           </div>
         </header>
 
+        {/* Dev debug strip — remove in prod */}
+        {process.env.NODE_ENV==="development"&&(
+          <div className="mb-4 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center gap-4 text-[9px] font-mono text-zinc-500 flex-wrap">
+            <span>status: <span className="text-amber-400">{escrowStatus}</span></span>
+            <span>turn: <span className="text-amber-400">{currentTurn}</span></span>
+            <span>myColor: <span className="text-amber-400">{playerColor}</span></span>
+            <span>isPlayer: <span className="text-amber-400">{String(!!(isWhitePlayer||isBlackPlayer))}</span></span>
+            <span>isWhite: <span className="text-amber-400">{String(!!isWhitePlayer)}</span></span>
+            <span>isBlack: <span className="text-amber-400">{String(!!isBlackPlayer)}</span></span>
+            <span>white: <span className="text-zinc-400">{escrowData?.white?formatAddress(escrowData.white):"—"}</span></span>
+            <span>black: <span className="text-zinc-400">{escrowData?.black&&escrowData.black!==escrowData.white?formatAddress(escrowData.black):"—"}</span></span>
+            <span>wallet: <span className="text-zinc-400">{connectedAddress?formatAddress(connectedAddress):"none"}</span></span>
+          </div>
+        )}
+
         <div className="flex flex-col lg:flex-row gap-6 items-start justify-center">
 
           {/* Board column */}
@@ -617,7 +670,7 @@ export default function GamePage() {
               );
             })()}
 
-            {renderBoard(!!isPlayer&&escrowStatus==="Active")}
+            {renderBoard(escrowStatus==="Active"&&(isWhitePlayer||isBlackPlayer))}
 
             {/* Your panel */}
             {(()=>{
