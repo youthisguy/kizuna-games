@@ -184,8 +184,11 @@ export default function GamePage() {
   // Refs for stale-closure-free polling
   const escrowStatusRef  = useRef(escrowStatus);
   const connectedRef     = useRef(connectedAddress);
-  const escrowIdRef      = useRef(escrowId);
+  const escrowIdRef       = useRef(escrowId);
+  const gameContractIdRef = useRef(gameContractId);
   useEffect(()=>{ escrowIdRef.current = escrowId; },[escrowId]);
+  useEffect(()=>{ gameContractIdRef.current = gameContractId; },[gameContractId]);
+  useEffect(()=>{ gameContractIdRef.current = gameContractId; },[gameContractId]);
   useEffect(()=>{ escrowStatusRef.current=escrowStatus; },[escrowStatus]);
   useEffect(()=>{ connectedRef.current=connectedAddress; },[connectedAddress]);
 
@@ -217,7 +220,7 @@ export default function GamePage() {
     if (!escrowId) return;
     setEscrowStatus("loading");
     try {
-      // 1. Fetch escrow
+      // Fetch escrow
       const ed = await simRead(ESCROW_CONTRACT_ID,"get_game",[nativeToScVal(escrowId,{type:"u64"})],connectedAddress||undefined);
       console.log("[loadGameState] raw escrowData:", JSON.stringify(ed, (k,v)=>typeof v==='bigint'?v.toString():v));
       setEscrowData(ed);
@@ -226,46 +229,65 @@ export default function GamePage() {
       setEscrowStatus(status);
       setPotSize(status==="Active"?BigInt(ed.stake)*2n:BigInt(ed.stake));
 
-      // 2. Determine player color
+      // Determine player color
       if (connectedAddress) {
         if (ed.white===connectedAddress) setPlayerColor("w");
         else if (ed.black && ed.black!==ed.white && ed.black===connectedAddress) setPlayerColor("b");
       }
 
-      // 3. Fetch game contract state
-      try {
-        const gd = await simRead(GAME_CONTRACT_ID,"get_game",[nativeToScVal(escrowId,{type:"u64"})],connectedAddress||undefined);
-        console.log("[loadGameState] game contract found, setting gcId:", escrowId.toString());
-        setGameContractId(escrowId); // game contract uses same ID as escrow_id
-        const moves: string[] = (gd.moves as any[]).map((m:any)=>{
-          const s = m.san;
-          if (typeof s === "string") return s;
-          if (Array.isArray(s)) return String(s[0]);
-          if (typeof s === "object" && s !== null) return String(Object.values(s)[0]||"");
-          return String(s||"");
-        }).filter(Boolean);
-        console.log("[loadGameState] moves from game contract:", moves);
-        setMoveHistory(moves);
-        const fenRaw = gd.current_fen;
-        const fenStr = typeof fenRaw==="string"?fenRaw:Array.isArray(fenRaw)?String(fenRaw[0]):String(Object.values(fenRaw||{})[0]||"");
-        console.log("[loadGameState] fenStr:", fenStr);
-        if (fenStr && fenStr!=="" && fenStr!=="loading") {
-          setBoard(fenToBoard(fenStr));
-          setCurrentTurn(moves.length%2===0?"w":"b");
+      // Find game contract record — gcId may differ from escrowId
+      // create if not found.
+      const findAndSetGameContract = async () => {
+        const ids_raw = await simRead(GAME_CONTRACT_ID, "get_all_games", [], connectedAddress||undefined);
+        const ids: bigint[] = Array.isArray(ids_raw) ? ids_raw.map((x:any)=>typeof x==="bigint"?x:BigInt(typeof x==="object"&&!Array.isArray(x)?Object.values(x)[0] as any:Array.isArray(x)?x[0]:x)) : [];
+        for (const gid of ids) {
+          try {
+            const gs = await simRead(GAME_CONTRACT_ID, "get_game", [nativeToScVal(gid,{type:"u64"})], connectedAddress||undefined);
+            const rawEId = gs.escrow_id;
+            const gsEscrowId = typeof rawEId==="bigint"?rawEId:typeof rawEId==="number"?BigInt(rawEId):Array.isArray(rawEId)?BigInt(String(rawEId[0])):BigInt(String(Object.values(rawEId||{})[0]));
+            if (gsEscrowId === escrowId) {
+              console.log("[loadGameState] found gcId:", gid.toString(), "for escrowId:", escrowId?.toString());
+              setGameContractId(gid);
+              // Load moves and FEN
+              const moves: string[] = (gs.moves as any[]).map((m:any)=>{
+                const s = m.san;
+                if (typeof s === "string") return s;
+                if (Array.isArray(s)) return String(s[0]);
+                return String(Object.values(s||{})[0]||"");
+              }).filter(Boolean);
+              setMoveHistory(moves);
+              const fenRaw = gs.current_fen;
+              const fen = typeof fenRaw==="string"?fenRaw:Array.isArray(fenRaw)?String(fenRaw[0]):String(Object.values(fenRaw||{})[0]||"");
+              if (fen&&fen!=="") { setBoard(fenToBoard(fen)); setCurrentTurn(moves.length%2===0?"w":"b"); }
+              return true;
+            }
+          } catch {}
         }
-        // Detect outcome
-        const phase = typeof gd.phase==="object"?Object.keys(gd.phase)[0]:String(gd.phase);
-        if (phase==="Completed"||phase==="Settled") {
-          const outcome = typeof gd.outcome==="object"?Object.keys(gd.outcome)[0]:String(gd.outcome);
-          if (outcome==="WhiteWins") setWinner("w");
-          else if (outcome==="BlackWins") setWinner("b");
-          else if (outcome==="Draw") setWinner("draw");
-          setEscrowStatus("Finished");
+        return false;
+      };
+
+      try {
+        const found = await findAndSetGameContract();
+        if (!found && status === "Active" && ed.white && ed.black && ed.black !== ed.white && connectedAddress && walletsKit) {
+          console.log("[loadGameState] no game contract record found — creating...");
+          const gcResult = await sendTx(connectedAddress, walletsKit, GAME_CONTRACT_ID, "create_game", [
+            new Address(ed.white).toScVal(),
+            new Address(ed.black).toScVal(),
+            nativeToScVal(escrowId!, {type:"u64"}),
+            nativeToScVal(0n, {type:"u64"}),
+          ], (s) => console.log("[create_game]", s));
+          if (gcResult) {
+            const gcId = scValToNative(gcResult) as bigint;
+            console.log("[loadGameState] game contract created gcId:", gcId.toString());
+            setGameContractId(gcId);
+          }
+        } else if (!found) {
+          console.log("[loadGameState] game contract record not found and cannot create yet");
         }
       } catch(gcErr) {
-        console.warn("[loadGameState] game contract not found for id:", escrowId?.toString(), gcErr);
-        // Game contract record doesn't exist yet — show starting position
+        console.warn("[loadGameState] game contract lookup error:", gcErr);
       }
+
     } catch(e) {
       console.error("[loadGameState] failed:", e);
       setEscrowStatus("error");
@@ -311,7 +333,9 @@ export default function GamePage() {
         // Poll game contract for moves when active
         if (newStatus==="Active"||status==="Active") {
           try {
-            const gd = await simRead(GAME_CONTRACT_ID,"get_game",[nativeToScVal(pollId,{type:"u64"})],connectedRef.current||undefined);
+            const gcPollId = gameContractIdRef.current ?? pollId;
+            const gd = await simRead(GAME_CONTRACT_ID,"get_game",[nativeToScVal(gcPollId,{type:"u64"})],connectedRef.current||undefined);
+            console.log("[poll] game contract moves check at gcId:", gcPollId.toString());
             const moves: string[] = (gd.moves as any[]).map((m:any)=>{
               const s = m.san;
               if (typeof s === "string") return s;
