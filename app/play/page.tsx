@@ -77,7 +77,6 @@ async function sendTx(
 
 interface GameInfo { id:string; status:string; stake:string; white:string; black?:string; created_at:number; }
 
-// ─── Component ────────────────────────────────────────────────────────────────
 export default function PlayLobby() {
   const {address: connectedAddress, walletsKit} = useWallet();
   const router = useRouter();
@@ -101,17 +100,36 @@ export default function PlayLobby() {
   const [allGames, setAllGames]                     = useState<GameInfo[]>([]);
   const [allGamesLoading, setAllGamesLoading]       = useState(false);
   const [showAllGames, setShowAllGames]             = useState(false);
-
+  const [totalStaked, setTotalStaked]               = useState<string>("—");
+console.log("total staked", totalStaked)
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Auto-fetch game lists on mount (no wallet required)
+  // Auto-fetch game lists and escrow bal
   useEffect(() => {
     if (!mounted) return;
     fetchActiveGames();
     fetchAllGames();
+    // Read escrow contract's XLM balance via native token contract
+    simRead(
+      NATIVE_TOKEN_ID,
+      "balance",
+      [new Address(ESCROW_CONTRACT_ID).toScVal()]
+    ).then(raw => {
+      if (raw !== null && raw !== undefined) {
+        const stroops = typeof raw === "bigint" ? raw : BigInt(raw);
+        setTotalStaked(`${(Number(stroops) / 10_000_000).toFixed(2)} XLM`);
+      }
+    }).catch(() => {});
   }, [mounted]);
+ 
+  // Handle ?join=X invite links (no useSearchParams — avoids Suspense requirement)
+  useEffect(() => {
+    if (!mounted) return;
+    const joinParam = new URLSearchParams(window.location.search).get("join");
+    if (joinParam) router.replace(`/play/${joinParam}`);
+  }, [mounted, router]);
 
   // Handle ?join=X invite links (no useSearchParams — avoids Suspense requirement)
   useEffect(() => {
@@ -299,7 +317,7 @@ export default function PlayLobby() {
               <div className="text-center py-6 space-y-3">
                 <div className="text-7xl mb-4" style={{filter:"drop-shadow(0 0 30px rgba(217,119,6,0.4))"}}>♚</div>
                 <h2 className="text-3xl font-bold text-white tracking-wider">Play. Stake. <span className="text-amber-400">Conquer.</span></h2>
-                <p className="text-zinc-500 text-sm leading-relaxed max-w-sm mx-auto">P2P chess with real XLM on the line. Stakes locked in Soroban escrow. Winner claims all.</p>
+                <p className="text-zinc-500 text-sm leading-relaxed max-w-sm mx-auto">P2P chess with XLM on the line. Stakes locked in Soroban escrow. Winner claims all.</p>
               </div>
 
               {connectedAddress ? (<>
@@ -387,7 +405,7 @@ export default function PlayLobby() {
               <div className="grid grid-cols-3 gap-3">
                 {[
                   {label:"Open Games", value:activeGames.length||"—", icon:Swords},
-                  {label:"Total Staked", value:"— XLM", icon:Coins},
+                  {label:"Total Staked", value:totalStaked, icon:Coins},
                   {label:"Games Played", value:allGames.length||"—", icon:Trophy},
                 ].map(({label,value,icon:Icon})=>(
                   <div key={label} className="border border-zinc-800/50 rounded-xl p-3 text-center bg-zinc-900/20">

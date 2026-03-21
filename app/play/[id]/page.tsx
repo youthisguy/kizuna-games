@@ -845,7 +845,7 @@ export default function GamePage() {
               <div>
                 <p className="text-[10px] text-amber-600 uppercase tracking-[0.3em] mb-2">Game Over</p>
                 <h2 className="text-3xl font-black text-white">{winner==="draw"?"Draw!":winner===playerColor?<><span className="text-amber-400">Victory</span> is yours</>:isPlayer?"You lost":"Game ended"}</h2>
-                <p className="text-zinc-500 text-sm mt-2">{winner==="draw"?"Stakes returned":winner===playerColor?`${stroopsToXlm(potSize*985n/1000n)} XLM sent to your wallet`:"Better luck next time"}</p>
+                <p className="text-zinc-500 text-sm mt-2">{winner==="draw"?"Stakes returned - confirm transaction in your wallet":winner===playerColor?`${stroopsToXlm(potSize*985n/1000n)} XLM - confirm transaction in your wallet to receive`:"Better luck next time"}</p>
                 {txStatus?.hash&&<a href={`https://stellar.expert/explorer/testnet/tx/${txStatus.hash}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[10px] text-amber-600/70 hover:text-amber-400 mt-2 transition-colors">View tx <ExternalLink size={8}/></a>}
               </div>
               <div className="flex gap-3">
