@@ -20,7 +20,6 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
-// ─── Config ───────────────────────────────────────────────────────────────────
 const ESCROW_CONTRACT_ID = "CCSDLJLDIJSAOKFLX2QWCOVLENA4FFN2EMSGJRFKTIBYY4UUA2HKDGBN";
 const GAME_CONTRACT_ID   = "CBBIQM6V5XEF5PBB7DARQ2Q26WHBHKLPYKD4ELHOQ7YBZ4CMJXC2DO54";
 const NATIVE_TOKEN_ID    = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
@@ -29,19 +28,22 @@ const RPC_URL            = "https://soroban-testnet.stellar.org:443";
 const server             = new StellarRpc.Server(RPC_URL);
 const networkPassphrase  = Networks.TESTNET;
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+const TIMER_SECONDS = 86400; // 24 hours
+
 const STATUS_MAP: Record<number, string> = { 0:"Waiting", 1:"Active", 2:"Finished", 3:"Drawn", 4:"Cancelled", 5:"Timeout" };
 function parseStatus(r: any): string {
   if (typeof r === "number") return STATUS_MAP[r] ?? String(r);
-  if (Array.isArray(r)) return String(r[0]); // e.g. ["Active"] -> "Active"
+  if (Array.isArray(r)) return String(r[0]);
   if (typeof r === "object" && r !== null) return Object.keys(r)[0];
   return String(r);
 }
 function stroopsToXlm(s: bigint | number) { return (Number(s) / 10_000_000).toFixed(2); }
 function formatAddress(a: string) { return `${a.slice(0,6)}...${a.slice(-4)}`; }
-function formatTime(s: number) { return `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`; }
+function formatTime(s: number) {
+  if (s >= 3600) return `${Math.floor(s/3600).toString().padStart(2,"0")}:${Math.floor((s%3600)/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
+  return `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
+}
 
-// ─── Chess Types ──────────────────────────────────────────────────────────────
 type PieceType = "K"|"Q"|"R"|"B"|"N"|"P";
 type Color     = "w"|"b";
 type Piece     = { type: PieceType; color: Color } | null;
@@ -85,9 +87,19 @@ function boardToFen(board: Board, turn: Color, moveCount: number): string {
   return `${rows.join("/")} ${turn} - - 0 ${Math.floor(moveCount/2)+1}`;
 }
 
-function getValidMoves(board: Board, sq: Square, turn: Color): Square[] {
+function toSAN(piece: Piece, from: Square, to: Square, cap: Piece): string {
+  if (!piece) return "";
+  const f="abcdefgh", toSq=`${f[to.col]}${8-to.row}`;
+  if (piece.type==="P") return cap?`${f[from.col]}x${toSq}`:toSq;
+  return `${piece.type}${cap?"x":""}${toSq}`;
+}
+
+// ─── Chess Logic ──────────────────────────────────────────────────────────────
+
+// Get pseudo-legal moves (ignoring check)
+function getPseudoMoves(board: Board, sq: Square): Square[] {
   const piece = board[sq.row][sq.col];
-  if (!piece || piece.color !== turn) return [];
+  if (!piece) return [];
   const moves: Square[] = [];
   const inB=(r:number,c:number)=>r>=0&&r<8&&c>=0&&c<8;
   const canL=(r:number,c:number)=>inB(r,c)&&board[r][c]?.color!==piece.color;
@@ -106,11 +118,53 @@ function getValidMoves(board: Board, sq: Square, turn: Color): Square[] {
   return moves;
 }
 
-function toSAN(piece: Piece, from: Square, to: Square, cap: Piece): string {
-  if (!piece) return "";
-  const f="abcdefgh", toSq=`${f[to.col]}${8-to.row}`;
-  if (piece.type==="P") return cap?`${f[from.col]}x${toSq}`:toSq;
-  return `${piece.type}${cap?"x":""}${toSq}`;
+// Is the given color's king in check on this board?
+function isInCheck(board: Board, color: Color): boolean {
+  // Find king
+  let kr=-1, kc=-1;
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++) if(board[r][c]?.type==="K"&&board[r][c]?.color===color){kr=r;kc=c;}
+  if(kr===-1) return false;
+  const opp: Color = color==="w"?"b":"w";
+  // Check if any opponent piece attacks the king
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    const p=board[r][c];
+    if(p&&p.color===opp){
+      const ms=getPseudoMoves(board,{row:r,col:c});
+      if(ms.some(m=>m.row===kr&&m.col===kc)) return true;
+    }
+  }
+  return false;
+}
+
+// Apply a move to a board copy
+function applyMove(board: Board, from: Square, to: Square): Board {
+  const nb = board.map(r=>[...r]);
+  let p = nb[from.row][from.col]!;
+  if(p.type==="P"&&(to.row===0||to.row===7)) p={...p,type:"Q"};
+  nb[to.row][to.col]=p;
+  nb[from.row][from.col]=null;
+  return nb;
+}
+
+// Get fully legal moves — filters out any that leave own king in check
+function getLegalMoves(board: Board, sq: Square, turn: Color): Square[] {
+  const piece = board[sq.row][sq.col];
+  if(!piece||piece.color!==turn) return [];
+  return getPseudoMoves(board,sq).filter(to=>{
+    const nb=applyMove(board,sq,to);
+    return !isInCheck(nb,turn);
+  });
+}
+
+// Is the position checkmate or stalemate for `color`?
+function getGameResult(board: Board, color: Color): "checkmate"|"stalemate"|null {
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    const p=board[r][c];
+    if(p&&p.color===color){
+      if(getLegalMoves(board,{row:r,col:c},color).length>0) return null;
+    }
+  }
+  return isInCheck(board,color) ? "checkmate" : "stalemate";
 }
 
 // ─── RPC ─────────────────────────────────────────────────────────────────────
@@ -146,16 +200,14 @@ export default function GamePage() {
   const {address: connectedAddress, walletsKit} = useWallet();
   const params  = useParams();
   const router  = useRouter();
-  const rawId    = Array.isArray(params?.id) ? params.id[0] : params?.id;
+  const rawId   = Array.isArray(params?.id) ? params.id[0] : params?.id;
   const escrowId = useMemo(() => rawId ? BigInt(rawId) : null, [rawId]);
 
-  // Game state loaded from chain
   const [escrowStatus, setEscrowStatus] = useState<string>("loading");
   const [escrowData, setEscrowData]     = useState<any>(null);
   const [playerColor, setPlayerColor]   = useState<Color>("w");
   const [gameContractId, setGameContractId] = useState<bigint|null>(null);
 
-  // Board
   const [board, setBoard]             = useState<Board>(createInitialBoard());
   const [currentTurn, setCurrentTurn] = useState<Color>("w");
   const [selected, setSelected]       = useState<Square|null>(null);
@@ -165,10 +217,11 @@ export default function GamePage() {
   const [capturedB, setCapturedB]     = useState<Piece[]>([]);
   const [lastMove, setLastMove]       = useState<{from:Square;to:Square}|null>(null);
   const [winner, setWinner]           = useState<"w"|"b"|"draw"|null>(null);
+  const [inCheck, setInCheck]         = useState<Color|null>(null);
 
-  // UI
   const [loading, setLoading]         = useState(false);
   const [movePending, setMovePending] = useState(false);
+  const [joinLoading, setJoinLoading] = useState(false);
   const [drawOffered, setDrawOffered] = useState(false);
   const [txStatus, setTxStatus]       = useState<{type:"success"|"error"|"pending";msg:string;hash?:string}|null>(null);
   const [inviteCopied, setInviteCopied] = useState(false);
@@ -176,30 +229,23 @@ export default function GamePage() {
   const [mounted, setMounted]         = useState(false);
   const [potSize, setPotSize]         = useState<bigint>(0n);
 
-  // Timers
-  const [wTime, setWTime] = useState(600);
-  const [bTime, setBTime] = useState(600);
+  const [wTime, setWTime] = useState(TIMER_SECONDS);
+  const [bTime, setBTime] = useState(TIMER_SECONDS);
   const timerRef = useRef<NodeJS.Timeout|null>(null);
 
-  // Refs for stale-closure-free polling
-  const escrowStatusRef  = useRef(escrowStatus);
-  const connectedRef     = useRef(connectedAddress);
+  const escrowStatusRef   = useRef(escrowStatus);
+  const connectedRef      = useRef(connectedAddress);
   const escrowIdRef       = useRef(escrowId);
   const gameContractIdRef = useRef(gameContractId);
-  useEffect(()=>{ escrowIdRef.current = escrowId; },[escrowId]);
-  useEffect(()=>{ gameContractIdRef.current = gameContractId; },[gameContractId]);
-  useEffect(()=>{ gameContractIdRef.current = gameContractId; },[gameContractId]);
   useEffect(()=>{ escrowStatusRef.current=escrowStatus; },[escrowStatus]);
   useEffect(()=>{ connectedRef.current=connectedAddress; },[connectedAddress]);
+  useEffect(()=>{ escrowIdRef.current=escrowId; },[escrowId]);
+  useEffect(()=>{ gameContractIdRef.current=gameContractId; },[gameContractId]);
 
-  useEffect(()=>{
-    console.log("[GamePage] mounting, params:", params, "rawId:", rawId, "escrowId:", escrowId?.toString());
-    setMounted(true);
-  },[]);
+  useEffect(()=>{ setMounted(true); },[]);
 
-  // Load balance
   const loadBalance = useCallback(async()=>{
-    if (!connectedAddress) return;
+    if(!connectedAddress) return;
     try {
       const res=await fetch(`https://horizon-testnet.stellar.org/accounts/${connectedAddress}`);
       const d=await res.json();
@@ -210,93 +256,91 @@ export default function GamePage() {
 
   useEffect(()=>{ if(mounted) loadBalance(); },[loadBalance,mounted]);
 
-  // ── Initial load — re-run when wallet connects so playerColor is set correctly
   useEffect(()=>{
-    if (!mounted || !escrowId) return;
+    if(!mounted||!escrowId) return;
     loadGameState();
   },[mounted, escrowId, connectedAddress]);
 
+  const parseMoves = (movesArr: any[]): string[] =>
+    movesArr.map((m:any)=>{
+      const s=m.san;
+      if(typeof s==="string") return s;
+      if(Array.isArray(s)) return String(s[0]);
+      return String(Object.values(s||{})[0]||"");
+    }).filter(Boolean);
+
+  const parseFen = (raw: any): string => {
+    if(typeof raw==="string") return raw;
+    if(Array.isArray(raw)) return String(raw[0]);
+    return String(Object.values(raw||{})[0]||"");
+  };
+
+  const findAndSetGameContract = async (addr?: string): Promise<boolean> => {
+    try {
+      const ids_raw = await simRead(GAME_CONTRACT_ID,"get_all_games",[],addr||connectedAddress||undefined);
+      const ids: bigint[] = Array.isArray(ids_raw)?ids_raw.map((x:any)=>typeof x==="bigint"?x:BigInt(typeof x==="object"&&!Array.isArray(x)?Object.values(x)[0] as any:Array.isArray(x)?x[0]:x)):[];
+      for(const gid of ids){
+        try {
+          const gs=await simRead(GAME_CONTRACT_ID,"get_game",[nativeToScVal(gid,{type:"u64"})],addr||connectedAddress||undefined);
+          const rawEId=gs.escrow_id;
+          const gsEId=typeof rawEId==="bigint"?rawEId:typeof rawEId==="number"?BigInt(rawEId):Array.isArray(rawEId)?BigInt(String(rawEId[0])):BigInt(String(Object.values(rawEId||{})[0]));
+          if(gsEId===escrowId){
+            setGameContractId(gid);
+            const moves=parseMoves(gs.moves as any[]);
+            setMoveHistory(moves);
+            const fen=parseFen(gs.current_fen);
+            if(fen&&fen!==""){
+              const b=fenToBoard(fen);
+              setBoard(b);
+              const turn: Color=moves.length%2===0?"w":"b";
+              setCurrentTurn(turn);
+              setInCheck(isInCheck(b,turn)?turn:null);
+            }
+            return true;
+          }
+        } catch {}
+      }
+    } catch {}
+    return false;
+  };
+
   const loadGameState = async () => {
-    if (!escrowId) return;
+    if(!escrowId) return;
     setEscrowStatus("loading");
     try {
-      // Fetch escrow
-      const ed = await simRead(ESCROW_CONTRACT_ID,"get_game",[nativeToScVal(escrowId,{type:"u64"})],connectedAddress||undefined);
-      console.log("[loadGameState] raw escrowData:", JSON.stringify(ed, (k,v)=>typeof v==='bigint'?v.toString():v));
+      const ed=await simRead(ESCROW_CONTRACT_ID,"get_game",[nativeToScVal(escrowId,{type:"u64"})],connectedAddress||undefined);
       setEscrowData(ed);
-      const status = parseStatus(ed.status);
-      console.log("[loadGameState] parsed status:", status, "raw ed.status:", ed.status);
+      const status=parseStatus(ed.status);
       setEscrowStatus(status);
       setPotSize(status==="Active"?BigInt(ed.stake)*2n:BigInt(ed.stake));
-
-      // Determine player color
-      if (connectedAddress) {
-        if (ed.white===connectedAddress) setPlayerColor("w");
-        else if (ed.black && ed.black!==ed.white && ed.black===connectedAddress) setPlayerColor("b");
+      if(connectedAddress){
+        if(ed.white===connectedAddress) setPlayerColor("w");
+        else if(ed.black&&ed.black!==ed.white&&ed.black===connectedAddress) setPlayerColor("b");
       }
-
-      // Find game contract record — gcId may differ from escrowId
-      // create if not found.
-      const findAndSetGameContract = async () => {
-        const ids_raw = await simRead(GAME_CONTRACT_ID, "get_all_games", [], connectedAddress||undefined);
-        const ids: bigint[] = Array.isArray(ids_raw) ? ids_raw.map((x:any)=>typeof x==="bigint"?x:BigInt(typeof x==="object"&&!Array.isArray(x)?Object.values(x)[0] as any:Array.isArray(x)?x[0]:x)) : [];
-        for (const gid of ids) {
-          try {
-            const gs = await simRead(GAME_CONTRACT_ID, "get_game", [nativeToScVal(gid,{type:"u64"})], connectedAddress||undefined);
-            const rawEId = gs.escrow_id;
-            const gsEscrowId = typeof rawEId==="bigint"?rawEId:typeof rawEId==="number"?BigInt(rawEId):Array.isArray(rawEId)?BigInt(String(rawEId[0])):BigInt(String(Object.values(rawEId||{})[0]));
-            if (gsEscrowId === escrowId) {
-              console.log("[loadGameState] found gcId:", gid.toString(), "for escrowId:", escrowId?.toString());
-              setGameContractId(gid);
-              // Load moves and FEN
-              const moves: string[] = (gs.moves as any[]).map((m:any)=>{
-                const s = m.san;
-                if (typeof s === "string") return s;
-                if (Array.isArray(s)) return String(s[0]);
-                return String(Object.values(s||{})[0]||"");
-              }).filter(Boolean);
-              setMoveHistory(moves);
-              const fenRaw = gs.current_fen;
-              const fen = typeof fenRaw==="string"?fenRaw:Array.isArray(fenRaw)?String(fenRaw[0]):String(Object.values(fenRaw||{})[0]||"");
-              if (fen&&fen!=="") { setBoard(fenToBoard(fen)); setCurrentTurn(moves.length%2===0?"w":"b"); }
-              return true;
-            }
-          } catch {}
-        }
-        return false;
-      };
-
-      try {
-        const found = await findAndSetGameContract();
-        if (!found && status === "Active" && ed.white && ed.black && ed.black !== ed.white && connectedAddress && walletsKit) {
-          console.log("[loadGameState] no game contract record found — creating...");
-          const gcResult = await sendTx(connectedAddress, walletsKit, GAME_CONTRACT_ID, "create_game", [
+      if(status==="Active"||status==="Finished"||status==="Drawn"){
+        const found=await findAndSetGameContract();
+        if(!found&&status==="Active"&&ed.white&&ed.black&&ed.black!==ed.white&&connectedAddress&&walletsKit){
+          const gcResult=await sendTx(connectedAddress,walletsKit,GAME_CONTRACT_ID,"create_game",[
             new Address(ed.white).toScVal(),
             new Address(ed.black).toScVal(),
-            nativeToScVal(escrowId!, {type:"u64"}),
-            nativeToScVal(0n, {type:"u64"}),
-          ], (s) => console.log("[create_game]", s));
-          if (gcResult) {
-            const gcId = scValToNative(gcResult) as bigint;
-            console.log("[loadGameState] game contract created gcId:", gcId.toString());
+            nativeToScVal(escrowId,{type:"u64"}),
+            nativeToScVal(0n,{type:"u64"}),
+          ],(s)=>console.log("[create_game]",s));
+          if(gcResult){
+            const gcId=scValToNative(gcResult) as bigint;
             setGameContractId(gcId);
           }
-        } else if (!found) {
-          console.log("[loadGameState] game contract record not found and cannot create yet");
         }
-      } catch(gcErr) {
-        console.warn("[loadGameState] game contract lookup error:", gcErr);
       }
-
-    } catch(e) {
-      console.error("[loadGameState] failed:", e);
+    } catch(e){
+      console.error("[loadGameState]",e);
       setEscrowStatus("error");
     }
   };
 
-  // ── Clock ─────────────────────────────────────────────────────────────────
+  // Clock
   useEffect(()=>{
-    if (escrowStatus!=="Active") return;
+    if(escrowStatus!=="Active") return;
     timerRef.current=setInterval(()=>{
       if(currentTurn==="w") setWTime(t=>Math.max(0,t-1));
       else setBTime(t=>Math.max(0,t-1));
@@ -304,52 +348,49 @@ export default function GamePage() {
     return ()=>{ if(timerRef.current) clearInterval(timerRef.current); };
   },[escrowStatus,currentTurn]);
 
-  // ── Poll – both waiting and active ───────────────────────────────────────
+  // Poll
   useEffect(()=>{
-    if (!mounted || !escrowId) return;
-    const poll = setInterval(async()=>{
-      const status = escrowStatusRef.current;
-      if (status==="error"||status==="loading"||status==="Finished"||status==="Drawn"||status==="Cancelled") return;
+    if(!mounted||!escrowId) return;
+    const poll=setInterval(async()=>{
+      const status=escrowStatusRef.current;
+      if(status==="error"||status==="loading"||status==="Finished"||status==="Drawn"||status==="Cancelled") return;
       try {
-        // Poll escrow for status changes
-        const pollId = escrowIdRef.current;
-        if (!pollId) return;
-        const ed = await simRead(ESCROW_CONTRACT_ID,"get_game",[nativeToScVal(pollId,{type:"u64"})],connectedRef.current||undefined);
-        const newStatus = parseStatus(ed.status);
-        if (newStatus!==escrowStatusRef.current) {
+        const pollId=escrowIdRef.current;
+        if(!pollId) return;
+        const ed=await simRead(ESCROW_CONTRACT_ID,"get_game",[nativeToScVal(pollId,{type:"u64"})],connectedRef.current||undefined);
+        const newStatus=parseStatus(ed.status);
+        if(newStatus!==escrowStatusRef.current){
           setEscrowStatus(newStatus);
           setEscrowData(ed);
-          if (newStatus==="Active") {
+          if(newStatus==="Active"){
             setPotSize(BigInt(ed.stake)*2n);
-            // Re-determine playerColor now that black is known
-            const addr = connectedRef.current;
-            if (addr) {
-              if (ed.white===addr) setPlayerColor("w");
-              else if (ed.black && ed.black!==ed.white && ed.black===addr) setPlayerColor("b");
+            const addr=connectedRef.current;
+            if(addr){
+              if(ed.white===addr) setPlayerColor("w");
+              else if(ed.black&&ed.black!==ed.white&&ed.black===addr) setPlayerColor("b");
             }
           }
+          if(newStatus==="Finished"||newStatus==="Drawn"){
+            setEscrowStatus(newStatus);
+            setWinner(newStatus==="Drawn"?"draw":ed.white===connectedRef.current?"w":"b");
+          }
         }
-
-        // Poll game contract for moves when active
-        if (newStatus==="Active"||status==="Active") {
+        if(newStatus==="Active"||status==="Active"){
+          const gcPollId=gameContractIdRef.current??pollId;
           try {
-            const gcPollId = gameContractIdRef.current ?? pollId;
-            const gd = await simRead(GAME_CONTRACT_ID,"get_game",[nativeToScVal(gcPollId,{type:"u64"})],connectedRef.current||undefined);
-            console.log("[poll] game contract moves check at gcId:", gcPollId.toString());
-            const moves: string[] = (gd.moves as any[]).map((m:any)=>{
-              const s = m.san;
-              if (typeof s === "string") return s;
-              if (Array.isArray(s)) return String(s[0]);
-              if (typeof s === "object" && s !== null) return String(Object.values(s)[0]||"");
-              return String(s||"");
-            }).filter(Boolean);
-            console.log("[poll] game contract moves:", moves);
+            const gd=await simRead(GAME_CONTRACT_ID,"get_game",[nativeToScVal(gcPollId,{type:"u64"})],connectedRef.current||undefined);
+            const moves=parseMoves(gd.moves as any[]);
             setMoveHistory(prev=>{
-              if (moves.length>prev.length) {
-                const fenRaw = gd.current_fen;
-        const fenStr = typeof fenRaw==="string"?fenRaw:Array.isArray(fenRaw)?String(fenRaw[0]):String(Object.values(fenRaw||{})[0]||"");
-        console.log("[loadGameState] fenStr:", fenStr);
-                if (fenStr&&fenStr!=="") { setBoard(fenToBoard(fenStr)); setCurrentTurn(moves.length%2===0?"w":"b"); }
+              if(moves.length>prev.length){
+                const fen=parseFen(gd.current_fen);
+                if(fen&&fen!==""){
+                  const b=fenToBoard(fen);
+                  const turn: Color=moves.length%2===0?"w":"b";
+                  setBoard(b);
+                  setCurrentTurn(turn);
+                  setInCheck(isInCheck(b,turn)?turn:null);
+                  setLastMove(null);
+                }
                 return moves;
               }
               return prev;
@@ -357,65 +398,95 @@ export default function GamePage() {
           } catch {}
         }
       } catch {}
-    }, 3000);
+    },3000);
     return ()=>clearInterval(poll);
   },[mounted,escrowId]);
 
-  // ── Toast dismiss ─────────────────────────────────────────────────────────
   useEffect(()=>{
-    if (txStatus&&txStatus.type!=="pending") { const t=setTimeout(()=>setTxStatus(null),8000); return ()=>clearTimeout(t); }
+    if(txStatus&&txStatus.type!=="pending"){ const t=setTimeout(()=>setTxStatus(null),8000); return()=>clearTimeout(t); }
   },[txStatus]);
 
-  // ── Chess logic ───────────────────────────────────────────────────────────
+  // ── Chess ─────────────────────────────────────────────────────────────────
   const handleSquareClick = (row: number, col: number) => {
-    console.log("[click] escrowStatus:", escrowStatus, "currentTurn:", currentTurn, "playerColor:", playerColor, "isPlayer:", isPlayer);
-    if (escrowStatus!=="Active") { console.log("[click] blocked: not Active"); return; }
-    if (currentTurn!==playerColor) { console.log("[click] blocked: not your turn"); return; }
-    if (selected) {
+    if(escrowStatus!=="Active") return;
+    if(currentTurn!==playerColor) return;
+    if(selected){
       const isValid=validMoves.some(m=>m.row===row&&m.col===col);
-      if (isValid) {
-        const nb=board.map(r=>[...r]);
-        const cap=nb[row][col];
-        let mp=nb[selected.row][selected.col]!;
-        if(cap){if(cap.color==="b")setCapturedW(p=>[...p,cap]);else setCapturedB(p=>[...p,cap]);}
+      if(isValid){
+        const nb=applyMove(board,selected,{row,col});
+        const cap=board[row][col];
+        if(cap){ if(cap.color==="b") setCapturedW(p=>[...p,cap]); else setCapturedB(p=>[...p,cap]); }
+        let mp=board[selected.row][selected.col]!;
         if(mp.type==="P"&&(row===0||row===7)) mp={...mp,type:"Q"};
         const san=toSAN(mp,selected,{row,col},cap);
-        nb[row][col]=mp; nb[selected.row][selected.col]=null;
         const newMoves=[...moveHistory,san];
         const newTurn: Color=currentTurn==="w"?"b":"w";
         const fen=boardToFen(nb,newTurn,newMoves.length);
+        setBoard(nb); setCurrentTurn(newTurn);
         setMoveHistory(newMoves); setLastMove({from:selected,to:{row,col}});
-        setBoard(nb); setCurrentTurn(newTurn); setSelected(null); setValidMoves([]);
+        setSelected(null); setValidMoves([]);
 
-        // Commit move onchain
-        if (connectedAddress&&walletsKit) {
-          const gcId=gameContractId??escrowId;
-          if (!gcId) { console.warn('[commit_move] no gcId'); } else {
-          setMovePending(true);
-          console.log("[commit_move] calling with gcId:", gcId.toString(), "san:", san, "player:", connectedAddress);
-          sendTx(connectedAddress,walletsKit,GAME_CONTRACT_ID,"commit_move",[
-            nativeToScVal(gcId,{type:"u64"}),
-            new Address(connectedAddress).toScVal(),
-            nativeToScVal(san,{type:"string"}),
-            nativeToScVal(fen,{type:"string"}),
-          ],(s)=>{ console.log("[commit_move] status:", s); if(s.type!=="pending") setMovePending(false); }).catch((e)=>{ console.error("[commit_move] catch:", e); setMovePending(false); });
-          } // end gcId check
+        // Check/checkmate detection
+        const oppInCheck=isInCheck(nb,newTurn);
+        setInCheck(oppInCheck?newTurn:null);
+        const result=getGameResult(nb,newTurn);
+        if(result==="checkmate"){
+          handleGameOver(currentTurn==="w"?"WhiteWins":"BlackWins",newMoves);
+        } else if(result==="stalemate"){
+          handleGameOver("Draw",newMoves);
         }
-        if(cap?.type==="K") handleGameOver(currentTurn==="w"?"WhiteWins":"BlackWins",newMoves);
+
+        // Commit onchain
+        if(connectedAddress&&walletsKit){
+          const gcId=gameContractId??escrowId;
+          if(gcId){
+            setMovePending(true);
+            sendTx(connectedAddress,walletsKit,GAME_CONTRACT_ID,"commit_move",[
+              nativeToScVal(gcId,{type:"u64"}),
+              new Address(connectedAddress).toScVal(),
+              nativeToScVal(san,{type:"string"}),
+              nativeToScVal(fen,{type:"string"}),
+            ],(s)=>{ if(s.type!=="pending") setMovePending(false); }).catch(()=>setMovePending(false));
+          }
+        }
         return;
       }
     }
     const piece=board[row][col];
-    if(piece&&piece.color===currentTurn){setSelected({row,col});setValidMoves(getValidMoves(board,{row,col},currentTurn));}
-    else{setSelected(null);setValidMoves([]);}
+    if(piece&&piece.color===currentTurn){
+      const legal=getLegalMoves(board,{row,col},currentTurn);
+      setSelected({row,col}); setValidMoves(legal);
+    } else { setSelected(null); setValidMoves([]); }
   };
 
-  // ── Onchain actions ───────────────────────────────────────────────────────
+  // ── Onchain ───────────────────────────────────────────────────────────────
   const escrowTx = async(method:string,args:xdr.ScVal[])=>{
     if(!connectedAddress||!walletsKit||!escrowId) return null;
     setLoading(true);
     const r=await sendTx(connectedAddress,walletsKit,ESCROW_CONTRACT_ID,method,args,setTxStatus);
     setLoading(false); loadBalance(); return r;
+  };
+
+  const handleJoinGame = async () => {
+    if(!connectedAddress||!walletsKit||!escrowId||!escrowData) return;
+    setJoinLoading(true);
+    const joined=await escrowTx("join_game",[
+      nativeToScVal(escrowId,{type:"u64"}),
+      new Address(connectedAddress).toScVal(),
+    ]);
+    if(joined!==null){
+      // Create game contract record
+      const gcResult=await sendTx(connectedAddress,walletsKit,GAME_CONTRACT_ID,"create_game",[
+        new Address(escrowData.white).toScVal(),
+        new Address(connectedAddress).toScVal(),
+        nativeToScVal(escrowId,{type:"u64"}),
+        nativeToScVal(0n,{type:"u64"}),
+      ],(s)=>console.log("[create_game]",s));
+      if(gcResult){ setGameContractId(scValToNative(gcResult) as bigint); }
+      setPlayerColor("b");
+      await loadGameState();
+    }
+    setJoinLoading(false);
   };
 
   const handleGameOver = async(outcome:"WhiteWins"|"BlackWins"|"Draw",moves:string[])=>{
@@ -428,7 +499,7 @@ export default function GamePage() {
       xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(outcome)]),
       nativeToScVal(moves.join(" "),{type:"string"}),
     ]);
-    if(gameContractId&&walletsKit) {
+    if(gameContractId&&walletsKit){
       sendTx(connectedAddress,walletsKit,GAME_CONTRACT_ID,"complete_game",[
         nativeToScVal(gameContractId,{type:"u64"}),
         new Address(connectedAddress).toScVal(),
@@ -439,21 +510,25 @@ export default function GamePage() {
   };
 
   const handleResign=()=>handleGameOver(currentTurn==="w"?"BlackWins":"WhiteWins",moveHistory);
-  const handleOfferDraw=async()=>{ setDrawOffered(true); await escrowTx("offer_draw",[nativeToScVal(escrowId,{type:"u64"}),new Address(connectedAddress!).toScVal()]); };
-  const handleAcceptDraw=async()=>{ await escrowTx("accept_draw",[nativeToScVal(escrowId,{type:"u64"}),new Address(connectedAddress!).toScVal()]); handleGameOver("Draw",moveHistory); };
+  const handleOfferDraw=async()=>{ setDrawOffered(true); await escrowTx("offer_draw",[nativeToScVal(escrowId!,{type:"u64"}),new Address(connectedAddress!).toScVal()]); };
+  const handleAcceptDraw=async()=>{ await escrowTx("accept_draw",[nativeToScVal(escrowId!,{type:"u64"}),new Address(connectedAddress!).toScVal()]); handleGameOver("Draw",moveHistory); };
 
-  if (!mounted || !escrowId) return null;
+  if(!mounted||!escrowId) return null;
 
-  const isMyTurn    = currentTurn===playerColor;
-  // white is always a player (creator); black is a player once they've joined (black !== white)
-  const isWhitePlayer = connectedAddress && escrowData && escrowData.white === connectedAddress;
-  const isBlackPlayer = connectedAddress && escrowData && escrowData.black && escrowData.black !== escrowData.white && escrowData.black === connectedAddress;
-  const isPlayer      = isWhitePlayer || isBlackPlayer;
-  const flipped     = playerColor==="b";
+  const isWhitePlayer = !!(connectedAddress&&escrowData&&escrowData.white===connectedAddress);
+  const isBlackPlayer = !!(connectedAddress&&escrowData&&escrowData.black&&escrowData.black!==escrowData.white&&escrowData.black===connectedAddress);
+  const isPlayer      = isWhitePlayer||isBlackPlayer;
+  const isMyTurn      = currentTurn===playerColor;
+  const flipped       = playerColor==="b";
   const opColor: Color = playerColor==="w"?"b":"w";
-  const stakeXlm    = escrowData ? (Number(escrowData.stake)/10_000_000).toFixed(2) : "0";
+  const stakeXlm      = escrowData?(Number(escrowData.stake)/10_000_000).toFixed(2):"0";
+  const canJoin       = !!(connectedAddress&&escrowData&&escrowData.white!==connectedAddress&&escrowStatus==="Waiting");
 
-  // ── Board renderer ────────────────────────────────────────────────────────
+  // Find king square for check highlight
+  const kingInCheckSq: Square|null = inCheck
+    ? (()=>{ for(let r=0;r<8;r++) for(let c=0;c<8;c++) if(board[r][c]?.type==="K"&&board[r][c]?.color===inCheck) return {row:r,col:c}; return null; })()
+    : null;
+
   const renderBoard = (interactive: boolean) => (
     <div className="relative" style={{borderRadius:"12px",overflow:"hidden",boxShadow:"0 0 60px -15px rgba(0,0,0,0.9),0 0 30px -8px rgba(217,119,6,0.12)"}}>
       <div className="absolute left-0 top-0 bottom-0 w-5 flex flex-col pointer-events-none z-10">
@@ -471,13 +546,17 @@ export default function GamePage() {
                 const isVal=validMoves.some(m=>m.row===displayR&&m.col===displayC);
                 const isFrom=lastMove?.from.row===displayR&&lastMove?.from.col===displayC;
                 const isTo=lastMove?.to.row===displayR&&lastMove?.to.col===displayC;
+                const isKingCheck=kingInCheckSq?.row===displayR&&kingInCheckSq?.col===displayC;
                 let bg=isLight?"#c8a97e":"#8b6340";
-                if(isSel) bg="#f0c040";
+                if(isKingCheck) bg="#c0392b";
+                else if(isSel) bg="#f0c040";
                 else if(isFrom||isTo) bg=isLight?"#d4c060":"#a09040";
                 return (
                   <button key={displayC} onClick={()=>interactive&&handleSquareClick(displayR,displayC)}
                     className="relative w-14 h-14 flex items-center justify-center group" style={{background:bg}}>
-                    {isVal&&(piece?<div className="absolute inset-0.5 rounded-sm border-[3px] border-black/30 pointer-events-none"/>:<div className="absolute w-4 h-4 rounded-full bg-black/25 pointer-events-none"/>)}
+                    {isVal&&(piece
+                      ?<div className="absolute inset-0.5 rounded-sm border-[3px] border-black/30 pointer-events-none"/>
+                      :<div className="absolute w-4 h-4 rounded-full bg-black/25 pointer-events-none"/>)}
                     {piece&&<span className="text-3xl select-none transition-transform group-hover:scale-110"
                       style={{color:piece.color==="w"?"#fff":"#1a1a1a",textShadow:piece.color==="w"?"0 1px 3px rgba(0,0,0,0.7)":"0 1px 2px rgba(255,255,255,0.2)",lineHeight:1}}>
                       {PIECE_UNICODE[piece.type][piece.color]}
@@ -496,13 +575,12 @@ export default function GamePage() {
   );
 
   // ── WAITING VIEW ─────────────────────────────────────────────────────────
-  if (escrowStatus==="Waiting"||escrowStatus==="loading") {
-    const isCreator = connectedAddress && escrowData?.white===connectedAddress;
+  if(escrowStatus==="Waiting"||escrowStatus==="loading"){
+    const isCreator=!!(connectedAddress&&escrowData?.white===connectedAddress);
     return (
       <div className="min-h-screen text-zinc-200 overflow-x-hidden"
         style={{background:"radial-gradient(ellipse 120% 80% at 50% -10%, #1a0a00 0%, #0a0a0f 55%, #050508 100%)",fontFamily:"'Courier New',Courier,monospace"}}>
         <div className="fixed inset-x-0 top-0 h-72 opacity-20 pointer-events-none" style={{background:"radial-gradient(ellipse 60% 100% at 50% 0%, #d97706, transparent)"}}/>
-
         <div className="relative max-w-6xl mx-auto px-4 py-8 pb-32">
           <header className="flex items-center gap-4 mb-8">
             <button onClick={()=>router.push("/play")} className="flex items-center gap-2 text-zinc-600 hover:text-zinc-300 transition-colors text-[10px] uppercase tracking-widest">
@@ -517,20 +595,16 @@ export default function GamePage() {
             <div className="flex items-center justify-center py-32"><RotateCcw size={24} className="animate-spin text-zinc-600"/></div>
           ) : (
             <div className="flex flex-col xl:flex-row gap-6 items-start">
-              {/* Board */}
               <div className="flex flex-col items-center gap-3">
-                <div className="w-full max-w-[480px] flex items-center justify-between px-4 py-3 rounded-xl border border-zinc-800/40 bg-zinc-900/20">
+                <div className="w-full max-w-120 flex items-center justify-between px-4 py-3 rounded-xl border border-zinc-800/40 bg-zinc-900/20">
                   <div className="flex items-center gap-3">
                     <div className="text-2xl opacity-30">♛</div>
                     <div><p className="text-xs font-bold text-zinc-600">Black</p><p className="text-[9px] text-zinc-700">Waiting to join...</p></div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-amber-500/30 animate-pulse"/>
-                    <span className="text-[9px] text-zinc-700 font-mono">10:00</span>
-                  </div>
+                  <div className="w-2 h-2 rounded-full bg-amber-500/30 animate-pulse"/>
                 </div>
                 {renderBoard(false)}
-                <div className="w-full max-w-[480px] flex items-center justify-between px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/5">
+                <div className="w-full max-w-120 flex items-center justify-between px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/5">
                   <div className="flex items-center gap-3">
                     <div className="text-2xl">♕</div>
                     <div>
@@ -538,11 +612,9 @@ export default function GamePage() {
                       <p className="text-[9px] text-zinc-600">{escrowData?.white?formatAddress(escrowData.white):""}</p>
                     </div>
                   </div>
-                  <span className="text-[9px] text-amber-500 uppercase tracking-widest font-mono">10:00</span>
                 </div>
               </div>
 
-              {/* Panel */}
               <div className="flex flex-col gap-4 w-full xl:w-72 shrink-0">
                 <div className="border border-amber-500/20 rounded-2xl p-5 bg-amber-500/5 space-y-2">
                   <div className="flex items-center gap-2">
@@ -552,19 +624,31 @@ export default function GamePage() {
                   <p className="text-zinc-500 text-sm">Game #{params.id} · {stakeXlm} XLM locked</p>
                 </div>
 
-                {isCreator && (
+                {/* Join button for non-creators */}
+                {canJoin&&(
+                  <div className="border border-emerald-500/25 rounded-2xl p-5 bg-emerald-500/5 space-y-4">
+                    <h3 className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Join This Game</h3>
+                    <div className="grid grid-cols-2 gap-3 text-[10px]">
+                      <div><p className="text-zinc-600 uppercase tracking-widest mb-1">Stake required</p><p className="text-amber-400 font-black text-base">{stakeXlm} XLM</p></div>
+                      <div><p className="text-zinc-600 uppercase tracking-widest mb-1">Prize pot</p><p className="text-white font-bold">{(parseFloat(stakeXlm)*2).toFixed(2)} XLM</p></div>
+                    </div>
+                    <button onClick={handleJoinGame} disabled={joinLoading}
+                      className="w-full py-3 rounded-xl font-black text-sm tracking-wider uppercase transition-all disabled:opacity-40 bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/25 flex items-center justify-center gap-2">
+                      {joinLoading?<><RotateCcw size={14} className="animate-spin"/> Joining...</>:<>Stake & Join as Black</>}
+                    </button>
+                  </div>
+                )}
+
+                {isCreator&&(
                   <div className="border border-zinc-800 rounded-2xl p-5 space-y-4 bg-zinc-900/30">
                     <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2"><Users size={12} className="text-amber-400"/> Invite</h3>
-                    <div className="space-y-2">
-                      <p className="text-[9px] text-zinc-600 uppercase tracking-widest">Share link</p>
-                      <div className="flex items-center gap-2 px-3 py-3 bg-black border border-zinc-800 rounded-xl">
-                        <span className="text-zinc-400 text-[10px] font-mono flex-1 truncate">
-                          {typeof window!=="undefined"?`${window.location.origin}/play/${params.id}`:""}
-                        </span>
-                        <button onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/play/${params.id}`);setInviteCopied(true);setTimeout(()=>setInviteCopied(false),2000);}}>
-                          {inviteCopied?<CheckCheck size={13} className="text-emerald-400"/>:<Copy size={13} className="text-zinc-600 hover:text-amber-400"/>}
-                        </button>
-                      </div>
+                    <div className="flex items-center gap-2 px-3 py-3 bg-black border border-zinc-800 rounded-xl">
+                      <span className="text-zinc-400 text-[10px] font-mono flex-1 truncate">
+                        {typeof window!=="undefined"?`${window.location.origin}/play/${params.id}`:""}
+                      </span>
+                      <button onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/play/${params.id}`);setInviteCopied(true);setTimeout(()=>setInviteCopied(false),2000);}}>
+                        {inviteCopied?<CheckCheck size={13} className="text-emerald-400"/>:<Copy size={13} className="text-zinc-600 hover:text-amber-400"/>}
+                      </button>
                     </div>
                     <div className="grid grid-cols-2 gap-3 text-[10px]">
                       <div className="bg-black border border-zinc-800 rounded-xl px-3 py-2.5">
@@ -581,7 +665,6 @@ export default function GamePage() {
 
                 <div className="border border-zinc-800/50 rounded-2xl p-5 bg-zinc-900/20 space-y-3 text-[10px]">
                   <div className="flex justify-between"><span className="text-zinc-600 uppercase tracking-widest">Stake locked</span><span className="text-amber-400 font-bold">{stakeXlm} XLM</span></div>
-                  <div className="flex justify-between"><span className="text-zinc-600 uppercase tracking-widest">Pot if joined</span><span className="text-white font-bold">{(parseFloat(stakeXlm)*2).toFixed(2)} XLM</span></div>
                   <div className="flex justify-between"><span className="text-zinc-600 uppercase tracking-widest">Winner gets</span><span className="text-emerald-400 font-bold">{(parseFloat(stakeXlm)*2*0.985).toFixed(2)} XLM</span></div>
                   <div className="flex items-center gap-2 pt-1">
                     <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"/>
@@ -589,15 +672,9 @@ export default function GamePage() {
                   </div>
                 </div>
 
-                <button onClick={loadGameState} className="w-full py-3 rounded-xl border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-600 transition-all text-[9px] font-bold uppercase tracking-widest flex items-center justify-center gap-2">
+                <button onClick={loadGameState} className="w-full py-3 rounded-xl border border-zinc-700 text-zinc-400 hover:text-white transition-all text-[9px] font-bold uppercase tracking-widest flex items-center justify-center gap-2">
                   <RotateCcw size={11}/> Check Status Now
                 </button>
-
-                {isCreator && (
-                  <button onClick={()=>router.push("/play")} className="w-full py-3 rounded-xl border border-zinc-800 text-zinc-600 hover:text-rose-400 hover:border-rose-500/30 transition-all text-[9px] font-bold uppercase tracking-widest">
-                    Cancel & Return to Lobby
-                  </button>
-                )}
               </div>
             </div>
           )}
@@ -606,36 +683,27 @@ export default function GamePage() {
     );
   }
 
-  // ── ERROR ─────────────────────────────────────────────────────────────────
-  if (escrowStatus==="error") {
+  if(escrowStatus==="error"){
     return (
       <div className="min-h-screen flex items-center justify-center" style={{background:"#050508",fontFamily:"'Courier New',Courier,monospace"}}>
         <div className="text-center space-y-4">
           <AlertCircle size={40} className="mx-auto text-rose-500"/>
-          <p className="text-zinc-400">Game #{params.id} not found or failed to load</p>
-          <p className="text-zinc-600 text-xs">Check browser console for details</p>
+          <p className="text-zinc-400">Game #{params.id} not found</p>
           <div className="flex gap-3 justify-center">
-            <button onClick={loadGameState} className="px-6 py-3 rounded-xl border border-zinc-700 text-zinc-400 hover:text-white text-sm transition-colors flex items-center gap-2">
-              <RotateCcw size={14}/> Retry
-            </button>
-            <button onClick={()=>router.push("/play")} className="px-6 py-3 rounded-xl border border-zinc-700 text-zinc-400 hover:text-white text-sm transition-colors">
-              Back to Lobby
-            </button>
+            <button onClick={loadGameState} className="px-6 py-3 rounded-xl border border-zinc-700 text-zinc-400 hover:text-white text-sm transition-colors flex items-center gap-2"><RotateCcw size={14}/> Retry</button>
+            <button onClick={()=>router.push("/play")} className="px-6 py-3 rounded-xl border border-zinc-700 text-zinc-400 hover:text-white text-sm transition-colors">Back to Lobby</button>
           </div>
         </div>
       </div>
     );
   }
 
-  // ── PLAYING / FINISHED VIEW ───────────────────────────────────────────────
+  // ── PLAYING / FINISHED ────────────────────────────────────────────────────
   return (
     <div className="min-h-screen text-zinc-200 overflow-x-hidden"
       style={{background:"radial-gradient(ellipse 120% 80% at 50% -10%, #1a0a00 0%, #0a0a0f 55%, #050508 100%)",fontFamily:"'Courier New',Courier,monospace"}}>
       <div className="fixed inset-x-0 top-0 h-72 opacity-20 pointer-events-none" style={{background:"radial-gradient(ellipse 60% 100% at 50% 0%, #d97706, transparent)"}}/>
-
       <div className="relative max-w-6xl mx-auto px-4 py-6 pb-32">
-
-        {/* Header bar */}
         <header className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
             <button onClick={()=>router.push("/play")} className="flex items-center gap-1.5 text-zinc-600 hover:text-zinc-300 transition-colors text-[10px] uppercase tracking-widest">
@@ -644,6 +712,7 @@ export default function GamePage() {
             <span className="text-zinc-800">·</span>
             <span className="text-[10px] text-zinc-500 font-mono">Game #{params.id}</span>
             {movePending&&<div className="flex items-center gap-1.5 px-2 py-1 border border-amber-500/20 rounded-lg bg-amber-500/5"><RotateCcw size={10} className="animate-spin text-amber-500"/><span className="text-[9px] text-amber-500">Saving move...</span></div>}
+            {inCheck&&<div className="flex items-center gap-1.5 px-2 py-1 border border-rose-500/40 rounded-lg bg-rose-500/10"><span className="text-[9px] text-rose-400 font-bold uppercase tracking-wider">⚠ {inCheck==="w"?"White":"Black"} in Check</span></div>}
           </div>
           <div className="flex items-center gap-3">
             {connectedAddress&&<div className="flex items-center gap-2 px-3 py-1.5 border border-zinc-800 rounded-xl bg-zinc-900/40"><div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"/><span className="text-[10px] text-zinc-400">{formatAddress(connectedAddress)}</span><span className="text-[10px] text-zinc-600">·</span><span className="text-[10px] text-amber-400 font-bold">{xlmBalance} XLM</span></div>}
@@ -651,34 +720,15 @@ export default function GamePage() {
           </div>
         </header>
 
-        {/* Dev debug strip — remove in prod */}
-        {process.env.NODE_ENV==="development"&&(
-          <div className="mb-4 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center gap-4 text-[9px] font-mono text-zinc-500 flex-wrap">
-            <span>status: <span className="text-amber-400">{escrowStatus}</span></span>
-            <span>turn: <span className="text-amber-400">{currentTurn}</span></span>
-            <span>myColor: <span className="text-amber-400">{playerColor}</span></span>
-            <span>isPlayer: <span className="text-amber-400">{String(!!(isWhitePlayer||isBlackPlayer))}</span></span>
-            <span>isWhite: <span className="text-amber-400">{String(!!isWhitePlayer)}</span></span>
-            <span>isBlack: <span className="text-amber-400">{String(!!isBlackPlayer)}</span></span>
-            <span>white: <span className="text-zinc-400">{escrowData?.white?formatAddress(escrowData.white):"—"}</span></span>
-            <span>black: <span className="text-zinc-400">{escrowData?.black&&escrowData.black!==escrowData.white?formatAddress(escrowData.black):"—"}</span></span>
-            <span>wallet: <span className="text-zinc-400">{connectedAddress?formatAddress(connectedAddress):"none"}</span></span>
-          </div>
-        )}
-
         <div className="flex flex-col lg:flex-row gap-6 items-start justify-center">
-
-          {/* Board column */}
           <div className="flex flex-col items-center gap-3 w-full lg:w-auto">
-
-            {/* Opponent panel */}
             {(()=>{
               const opActive=currentTurn===opColor&&escrowStatus==="Active";
               const opTime=opColor==="w"?wTime:bTime;
               const opCap=opColor==="w"?capturedW:capturedB;
               const opAddr=opColor==="w"?escrowData?.white:escrowData?.black;
               return (
-                <div className={`w-full max-w-[480px] flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${opActive?"border-amber-500/40 bg-amber-500/5 shadow-[0_0_20px_-5px_rgba(217,119,6,0.15)]":"border-zinc-800/40 bg-zinc-900/20"}`}>
+                <div className={`w-full max-w-[480px] flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${opActive?"border-amber-500/40 bg-amber-500/5":"border-zinc-800/40 bg-zinc-900/20"}`}>
                   <div className="flex items-center gap-3">
                     <div className="text-2xl">{opColor==="w"?"♕":"♛"}</div>
                     <div>
@@ -696,13 +746,12 @@ export default function GamePage() {
 
             {renderBoard(escrowStatus==="Active"&&(isWhitePlayer||isBlackPlayer))}
 
-            {/* Your panel */}
             {(()=>{
               const myActive=currentTurn===playerColor&&escrowStatus==="Active";
               const myTime=playerColor==="w"?wTime:bTime;
               const myCap=playerColor==="w"?capturedW:capturedB;
               return (
-                <div className={`w-full max-w-[480px] flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${myActive?"border-amber-500/40 bg-amber-500/5 shadow-[0_0_20px_-5px_rgba(217,119,6,0.15)]":"border-zinc-800/40 bg-zinc-900/20"}`}>
+                <div className={`w-full max-w-[480px] flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${myActive?"border-amber-500/40 bg-amber-500/5":"border-zinc-800/40 bg-zinc-900/20"}`}>
                   <div className="flex items-center gap-3">
                     <div className="text-2xl">{playerColor==="w"?"♕":"♛"}</div>
                     <div>
@@ -719,29 +768,24 @@ export default function GamePage() {
             })()}
           </div>
 
-          {/* Sidebar */}
           <div className="flex flex-col gap-4 w-full lg:w-64">
-
-            {/* Pot */}
             <div className="border border-amber-500/20 rounded-2xl p-5 bg-amber-500/5">
               <p className="text-[9px] text-amber-600/80 uppercase tracking-widest mb-2 flex items-center gap-1"><Coins size={10}/> Prize Pot</p>
               <p className="text-3xl font-black text-amber-400 tabular-nums">{stroopsToXlm(potSize)}<span className="text-sm text-amber-600 ml-2 font-bold">XLM</span></p>
               <p className="text-[9px] text-zinc-600 mt-1">Winner takes 98.5% · 1.5% fee</p>
             </div>
 
-            {/* Status */}
             <div className="border border-zinc-800 rounded-2xl p-4 bg-zinc-900/20">
-              {escrowStatus==="Active" ? (
+              {escrowStatus==="Active"?(
                 <>
                   <div className="flex items-center gap-2 mb-2">
                     <div className={`w-2 h-2 rounded-full ${isMyTurn&&isPlayer?"bg-amber-400 animate-pulse":"bg-zinc-600"}`}/>
-                    <span className="text-[10px] uppercase tracking-widest text-zinc-500">
-                      {isPlayer?(isMyTurn?"Your move":"Opponent's move"):"Spectating"}
-                    </span>
+                    <span className="text-[10px] uppercase tracking-widest text-zinc-500">{isPlayer?(isMyTurn?"Your move":"Opponent's move"):"Spectating"}</span>
                   </div>
                   <p className="text-[10px] text-zinc-600">Move <span className="text-white font-bold">{moveHistory.length+1}</span> · <span className={currentTurn==="w"?"text-zinc-200":"text-zinc-500"}>{currentTurn==="w"?"White":"Black"} to play</span></p>
+                  {inCheck&&<p className="text-[10px] text-rose-400 mt-1 font-bold">⚠ {inCheck==="w"?"White":"Black"} is in check!</p>}
                 </>
-              ) : (
+              ):(
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-zinc-600"/>
                   <span className="text-[10px] uppercase tracking-widest text-zinc-500">{escrowStatus}</span>
@@ -753,16 +797,15 @@ export default function GamePage() {
               </div>
             </div>
 
-            {/* Move history */}
             <div className="border border-zinc-800 rounded-2xl p-4 bg-zinc-900/20 flex-1">
               <h3 className="text-[9px] text-zinc-600 uppercase tracking-widest mb-3 flex items-center justify-between">
                 <span>Moves ({moveHistory.length})</span>
                 {moveHistory.length>0&&<span className="text-zinc-700">onchain ✓</span>}
               </h3>
               <div className="space-y-1 max-h-56 overflow-y-auto">
-                {moveHistory.length===0 ? (
+                {moveHistory.length===0?(
                   <p className="text-[10px] text-zinc-700 italic">No moves yet</p>
-                ) : moveHistory.reduce<string[][]>((p,m,i)=>{if(i%2===0)p.push([m]);else p[p.length-1].push(m);return p;},[])
+                ):moveHistory.reduce<string[][]>((p,m,i)=>{if(i%2===0)p.push([m]);else p[p.length-1].push(m);return p;},[])
                   .map((pair,i)=>(
                     <div key={i} className="flex gap-2 text-[10px] font-mono">
                       <span className="text-zinc-700 w-5 shrink-0">{i+1}.</span>
@@ -773,7 +816,6 @@ export default function GamePage() {
               </div>
             </div>
 
-            {/* Actions */}
             {isPlayer&&escrowStatus==="Active"&&(
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={drawOffered?handleAcceptDraw:handleOfferDraw} disabled={loading}
@@ -787,58 +829,34 @@ export default function GamePage() {
               </div>
             )}
 
-            {/* Contract links */}
             <div className="border border-zinc-800/50 rounded-xl p-3 space-y-1">
-              <a href={`https://stellar.expert/explorer/testnet/contract/${ESCROW_CONTRACT_ID}`} target="_blank" rel="noopener noreferrer"
-                className="text-[9px] font-mono text-zinc-700 hover:text-amber-400 transition-colors flex items-center gap-1">
-                Escrow · {formatAddress(ESCROW_CONTRACT_ID)} <ExternalLink size={8}/>
-              </a>
-              <a href={`https://stellar.expert/explorer/testnet/contract/${GAME_CONTRACT_ID}`} target="_blank" rel="noopener noreferrer"
-                className="text-[9px] font-mono text-zinc-700 hover:text-amber-400 transition-colors flex items-center gap-1">
-                Game · {formatAddress(GAME_CONTRACT_ID)} <ExternalLink size={8}/>
-              </a>
+              <a href={`https://stellar.expert/explorer/testnet/contract/${ESCROW_CONTRACT_ID}`} target="_blank" rel="noopener noreferrer" className="text-[9px] font-mono text-zinc-700 hover:text-amber-400 transition-colors flex items-center gap-1">Escrow · {formatAddress(ESCROW_CONTRACT_ID)} <ExternalLink size={8}/></a>
+              <a href={`https://stellar.expert/explorer/testnet/contract/${GAME_CONTRACT_ID}`} target="_blank" rel="noopener noreferrer" className="text-[9px] font-mono text-zinc-700 hover:text-amber-400 transition-colors flex items-center gap-1">Game · {formatAddress(GAME_CONTRACT_ID)} <ExternalLink size={8}/></a>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Result overlay */}
       <AnimatePresence>
         {winner&&(
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-            className="fixed inset-0 z-40 flex items-center justify-center bg-black/75 backdrop-blur-sm">
-            <motion.div initial={{scale:0.85,y:20}} animate={{scale:1,y:0}}
-              className="border border-amber-500/30 rounded-3xl p-10 text-center space-y-5 max-w-sm mx-4"
-              style={{background:"linear-gradient(135deg,#0f0800,#0a0a0f)",boxShadow:"0 0 80px -20px rgba(217,119,6,0.4)"}}>
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-40 flex items-center justify-center bg-black/75 backdrop-blur-sm">
+            <motion.div initial={{scale:0.85,y:20}} animate={{scale:1,y:0}} className="border border-amber-500/30 rounded-3xl p-10 text-center space-y-5 max-w-sm mx-4" style={{background:"linear-gradient(135deg,#0f0800,#0a0a0f)",boxShadow:"0 0 80px -20px rgba(217,119,6,0.4)"}}>
               <div className="text-6xl" style={{filter:"drop-shadow(0 0 30px rgba(217,119,6,0.6))"}}>{winner==="w"?"♔":winner==="b"?"♚":"🤝"}</div>
               <div>
                 <p className="text-[10px] text-amber-600 uppercase tracking-[0.3em] mb-2">Game Over</p>
-                <h2 className="text-3xl font-black text-white">
-                  {winner==="draw"?"Draw!":winner===playerColor?<><span className="text-amber-400">Victory</span> is yours</>:isPlayer?"You lost":"Game ended"}
-                </h2>
-                <p className="text-zinc-500 text-sm mt-2">
-                  {winner==="draw"?"Stakes returned"
-                   :winner===playerColor?`${stroopsToXlm(potSize*985n/1000n)} XLM sent to your wallet`
-                   :"Better luck next time"}
-                </p>
+                <h2 className="text-3xl font-black text-white">{winner==="draw"?"Draw!":winner===playerColor?<><span className="text-amber-400">Victory</span> is yours</>:isPlayer?"You lost":"Game ended"}</h2>
+                <p className="text-zinc-500 text-sm mt-2">{winner==="draw"?"Stakes returned":winner===playerColor?`${stroopsToXlm(potSize*985n/1000n)} XLM sent to your wallet`:"Better luck next time"}</p>
                 {txStatus?.hash&&<a href={`https://stellar.expert/explorer/testnet/tx/${txStatus.hash}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[10px] text-amber-600/70 hover:text-amber-400 mt-2 transition-colors">View tx <ExternalLink size={8}/></a>}
               </div>
               <div className="flex gap-3">
-                <button onClick={()=>router.push("/play")}
-                  className="flex-1 py-4 rounded-2xl font-black tracking-wider uppercase text-sm active:scale-95"
-                  style={{background:"linear-gradient(135deg,#d97706,#b45309)",color:"#000"}}>
-                  New Game
-                </button>
-                <button onClick={()=>setWinner(null)} className="px-5 py-4 rounded-2xl border border-zinc-800 text-zinc-500 hover:text-zinc-300">
-                  <X size={16}/>
-                </button>
+                <button onClick={()=>router.push("/play")} className="flex-1 py-4 rounded-2xl font-black tracking-wider uppercase text-sm active:scale-95" style={{background:"linear-gradient(135deg,#d97706,#b45309)",color:"#000"}}>New Game</button>
+                <button onClick={()=>setWinner(null)} className="px-5 py-4 rounded-2xl border border-zinc-800 text-zinc-500 hover:text-zinc-300"><X size={16}/></button>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Toast */}
       <AnimatePresence>
         {txStatus&&(
           <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} exit={{opacity:0,scale:0.95}}
