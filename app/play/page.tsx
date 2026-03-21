@@ -24,7 +24,7 @@ import { motion } from "framer-motion";
 const ESCROW_CONTRACT_ID = "CCSDLJLDIJSAOKFLX2QWCOVLENA4FFN2EMSGJRFKTIBYY4UUA2HKDGBN";
 const GAME_CONTRACT_ID   = "CBBIQM6V5XEF5PBB7DARQ2Q26WHBHKLPYKD4ELHOQ7YBZ4CMJXC2DO54";
 const NATIVE_TOKEN_ID    = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
-const FALLBACK_ACCOUNT   = "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN";
+const FALLBACK_ACCOUNT   = "GDXK7EYVBXTITLBW2ZCODJW3B7VTVCNNNWDDEHKJ7Y67TZVW5VKRRMU6"; // public funded testnet account
 const RPC_URL            = "https://soroban-testnet.stellar.org:443";
 const server             = new StellarRpc.Server(RPC_URL);
 const networkPassphrase  = Networks.TESTNET;
@@ -102,7 +102,16 @@ export default function PlayLobby() {
   const [allGamesLoading, setAllGamesLoading]       = useState(false);
   const [showAllGames, setShowAllGames]             = useState(false);
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Auto-fetch game lists on mount (no wallet required)
+  useEffect(() => {
+    if (!mounted) return;
+    fetchActiveGames();
+    fetchAllGames();
+  }, [mounted]);
 
   // Handle ?join=X invite links (no useSearchParams — avoids Suspense requirement)
   useEffect(() => {
@@ -246,15 +255,10 @@ export default function PlayLobby() {
       </div>
       <div className="flex items-center gap-1.5 shrink-0 ml-2">
         <StatusBadge status={g.status}/>
-        {g.status==="Waiting" && g.white!==connectedAddress && (
-          <button onClick={()=>handleJoinGame(g)} disabled={loading}
-            className="text-[9px] px-2 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 transition-colors font-bold uppercase tracking-wider disabled:opacity-40">
-            Join
-          </button>
-        )}
+
         <button onClick={()=>router.push(`/play/${g.id}`)}
           className="text-[9px] px-2 py-0.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white transition-colors font-bold">
-          Open
+          View
         </button>
       </div>
     </div>

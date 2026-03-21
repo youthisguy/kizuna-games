@@ -23,7 +23,7 @@ import { AnimatePresence, motion } from "framer-motion";
 const ESCROW_CONTRACT_ID = "CCSDLJLDIJSAOKFLX2QWCOVLENA4FFN2EMSGJRFKTIBYY4UUA2HKDGBN";
 const GAME_CONTRACT_ID   = "CBBIQM6V5XEF5PBB7DARQ2Q26WHBHKLPYKD4ELHOQ7YBZ4CMJXC2DO54";
 const NATIVE_TOKEN_ID    = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
-const FALLBACK_ACCOUNT   = "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN";
+const FALLBACK_ACCOUNT   = "GDXK7EYVBXTITLBW2ZCODJW3B7VTVCNNNWDDEHKJ7Y67TZVW5VKRRMU6";
 const RPC_URL            = "https://soroban-testnet.stellar.org:443";
 const server             = new StellarRpc.Server(RPC_URL);
 const networkPassphrase  = Networks.TESTNET;
@@ -256,10 +256,18 @@ export default function GamePage() {
 
   useEffect(()=>{ if(mounted) loadBalance(); },[loadBalance,mounted]);
 
+  // Load game state on mount — works without wallet (uses fallback account for reads)
   useEffect(()=>{
     if(!mounted||!escrowId) return;
     loadGameState();
-  },[mounted, escrowId, connectedAddress]);
+  },[mounted, escrowId]);
+
+  // When wallet connects, update playerColor without full reload
+  useEffect(()=>{
+    if(!connectedAddress||!escrowData) return;
+    if(escrowData.white===connectedAddress) setPlayerColor("w");
+    else if(escrowData.black&&escrowData.black!==escrowData.white&&escrowData.black===connectedAddress) setPlayerColor("b");
+  },[connectedAddress, escrowData]);
 
   const parseMoves = (movesArr: any[]): string[] =>
     movesArr.map((m:any)=>{
@@ -596,7 +604,7 @@ export default function GamePage() {
           ) : (
             <div className="flex flex-col xl:flex-row gap-6 items-start">
               <div className="flex flex-col items-center gap-3">
-                <div className="w-full max-w-120 flex items-center justify-between px-4 py-3 rounded-xl border border-zinc-800/40 bg-zinc-900/20">
+                <div className="w-full max-w-[480px] flex items-center justify-between px-4 py-3 rounded-xl border border-zinc-800/40 bg-zinc-900/20">
                   <div className="flex items-center gap-3">
                     <div className="text-2xl opacity-30">♛</div>
                     <div><p className="text-xs font-bold text-zinc-600">Black</p><p className="text-[9px] text-zinc-700">Waiting to join...</p></div>
@@ -604,7 +612,7 @@ export default function GamePage() {
                   <div className="w-2 h-2 rounded-full bg-amber-500/30 animate-pulse"/>
                 </div>
                 {renderBoard(false)}
-                <div className="w-full max-w-120 flex items-center justify-between px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/5">
+                <div className="w-full max-w-[480px] flex items-center justify-between px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/5">
                   <div className="flex items-center gap-3">
                     <div className="text-2xl">♕</div>
                     <div>
@@ -666,14 +674,10 @@ export default function GamePage() {
                 <div className="border border-zinc-800/50 rounded-2xl p-5 bg-zinc-900/20 space-y-3 text-[10px]">
                   <div className="flex justify-between"><span className="text-zinc-600 uppercase tracking-widest">Stake locked</span><span className="text-amber-400 font-bold">{stakeXlm} XLM</span></div>
                   <div className="flex justify-between"><span className="text-zinc-600 uppercase tracking-widest">Winner gets</span><span className="text-emerald-400 font-bold">{(parseFloat(stakeXlm)*2*0.985).toFixed(2)} XLM</span></div>
-                  <div className="flex items-center gap-2 pt-1">
-                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"/>
-                    <span className="text-zinc-600">Auto-refreshing every 3s</span>
-                  </div>
                 </div>
 
                 <button onClick={loadGameState} className="w-full py-3 rounded-xl border border-zinc-700 text-zinc-400 hover:text-white transition-all text-[9px] font-bold uppercase tracking-widest flex items-center justify-center gap-2">
-                  <RotateCcw size={11}/> Check Status Now
+                  <RotateCcw size={11}/> Refresh
                 </button>
               </div>
             </div>
@@ -791,10 +795,6 @@ export default function GamePage() {
                   <span className="text-[10px] uppercase tracking-widest text-zinc-500">{escrowStatus}</span>
                 </div>
               )}
-              <div className="mt-2 flex items-center gap-1">
-                <div className="w-1.5 h-1.5 rounded-full bg-zinc-700 animate-pulse"/>
-                <span className="text-[9px] text-zinc-700">Polling every 3s</span>
-              </div>
             </div>
 
             <div className="border border-zinc-800 rounded-2xl p-4 bg-zinc-900/20 flex-1">
