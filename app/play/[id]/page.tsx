@@ -146,6 +146,23 @@ function applyMove(board: Board, from: Square, to: Square): Board {
   return nb;
 }
 
+// Diff two boards to find the from/to squares of the move made
+function diffBoards(before: Board, after: Board): {from:Square;to:Square}|null {
+  const disappeared: Square[] = [];
+  const appeared: Square[] = [];
+  const captured: Square[] = [];
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    const b=before[r][c], a=after[r][c];
+    if(b&&!a) disappeared.push({row:r,col:c});
+    else if(!b&&a) appeared.push({row:r,col:c});
+    else if(b&&a&&b.color!==a.color) captured.push({row:r,col:c}); // capture: enemy replaced
+  }
+  const from = disappeared[0] ?? null;
+  const to = captured[0] ?? appeared[0] ?? null;
+  if(from&&to) return {from,to};
+  return null;
+}
+
 // Get fully legal moves — filters out any that leave own king in check
 function getLegalMoves(board: Board, sq: Square, turn: Color): Square[] {
   const piece = board[sq.row][sq.col];
@@ -218,6 +235,9 @@ export default function GamePage() {
   const [lastMove, setLastMove]       = useState<{from:Square;to:Square}|null>(null);
   const [winner, setWinner]           = useState<"w"|"b"|"draw"|null>(null);
   const [inCheck, setInCheck]         = useState<Color|null>(null);
+  const [viewIndex, setViewIndex]     = useState<number|null>(null); // null = live
+  const [fenHistory, setFenHistory]   = useState<string[]>([]); // fen after each move
+  const [viewBoard, setViewBoard]     = useState<Board|null>(null); // board at viewIndex
 
   const [loading, setLoading]         = useState(false);
   const [movePending, setMovePending] = useState(false);
@@ -276,6 +296,15 @@ export default function GamePage() {
       if(Array.isArray(s)) return String(s[0]);
       return String(Object.values(s||{})[0]||"");
     }).filter(Boolean);
+
+  const parseMoveFens = (movesArr: any[]): string[] =>
+    movesArr.map((m:any)=>{
+      const f=m.fen_after;
+      if(typeof f==="string") return f;
+      if(Array.isArray(f)) return String(f[0]);
+      if(f && typeof f==="object") return String(Object.values(f)[0]||"");
+      return "";
+    });
 
   const parseFen = (raw: any): string => {
     if(typeof raw==="string") return raw;
@@ -414,9 +443,21 @@ export default function GamePage() {
     if(txStatus&&txStatus.type!=="pending"){ const t=setTimeout(()=>setTxStatus(null),8000); return()=>clearTimeout(t); }
   },[txStatus]);
 
+  // Keyboard navigation for move history
+  useEffect(()=>{
+    if(moveHistory.length===0) return;
+    const handler=(e:KeyboardEvent)=>{
+      if(e.key==="ArrowLeft")  setViewIndex(v=>{ const cur=v??moveHistory.length; return Math.max(0,cur-1); });
+      if(e.key==="ArrowRight") setViewIndex(v=>{ const cur=v??-1; const next=cur+1; return next>=moveHistory.length?null:next; });
+    };
+    window.addEventListener("keydown",handler);
+    return()=>window.removeEventListener("keydown",handler);
+  },[moveHistory.length]);
+
   // ── Chess ─────────────────────────────────────────────────────────────────
   const handleSquareClick = (row: number, col: number) => {
     if(escrowStatus!=="Active") return;
+    if(viewIndex!==null) return; // viewing history — must return to live first
     if(currentTurn!==playerColor) return;
     if(selected){
       const isValid=validMoves.some(m=>m.row===row&&m.col===col);
@@ -431,7 +472,10 @@ export default function GamePage() {
         const newTurn: Color=currentTurn==="w"?"b":"w";
         const fen=boardToFen(nb,newTurn,newMoves.length);
         setBoard(nb); setCurrentTurn(newTurn);
-        setMoveHistory(newMoves); setLastMove({from:selected,to:{row,col}});
+        setMoveHistory(newMoves);
+        setFenHistory(prev=>[...prev, fen]);
+        setViewIndex(null); // stay live after making move
+        setLastMove({from:selected,to:{row,col}});
         setSelected(null); setValidMoves([]);
 
         // Check/checkmate detection
@@ -537,13 +581,39 @@ export default function GamePage() {
     ? (()=>{ for(let r=0;r<8;r++) for(let c=0;c<8;c++) if(board[r][c]?.type==="K"&&board[r][c]?.color===inCheck) return {row:r,col:c}; return null; })()
     : null;
 
+  // Derived board/lastMove for viewing historical positions
+  const isViewingHistory = viewIndex !== null;
+
+  const displayBoard: Board = (() => {
+    if(viewIndex !== null && viewIndex >= 0 && viewIndex < fenHistory.length)
+      return fenToBoard(fenHistory[viewIndex]);
+    return board;
+  })();
+
+  // Derive highlight squares by diffing prev FEN → current FEN
+  const displayLastMove = (() => {
+    if(!isViewingHistory) return lastMove; // live: use locally tracked lastMove
+    if(viewIndex === 0) {
+      // First move: diff starting position vs fenHistory[0]
+      const before = createInitialBoard();
+      const after = fenToBoard(fenHistory[0]);
+      return diffBoards(before, after);
+    }
+    if(viewIndex !== null && viewIndex > 0 && viewIndex < fenHistory.length) {
+      const before = fenToBoard(fenHistory[viewIndex-1]);
+      const after  = fenToBoard(fenHistory[viewIndex]);
+      return diffBoards(before, after);
+    }
+    return null;
+  })();
+
   const renderBoard = (interactive: boolean) => (
     <div className="relative" style={{borderRadius:"12px",overflow:"hidden",boxShadow:"0 0 60px -15px rgba(0,0,0,0.9),0 0 30px -8px rgba(217,119,6,0.12)"}}>
       <div className="absolute left-0 top-0 bottom-0 w-5 flex flex-col pointer-events-none z-10">
         {Array.from({length:8},(_,i)=><div key={i} className="flex-1 flex items-center justify-center"><span className="text-[9px] text-zinc-600">{flipped?i+1:8-i}</span></div>)}
       </div>
       <div className="ml-5 mb-4">
-        {(flipped?[...board].reverse():board).map((row,rIdx)=>{
+        {(flipped?[...displayBoard].reverse():displayBoard).map((row,rIdx)=>{
           const displayR=flipped?7-rIdx:rIdx;
           return (
             <div key={displayR} className="flex">
@@ -552,9 +622,9 @@ export default function GamePage() {
                 const isLight=(displayR+displayC)%2===0;
                 const isSel=selected?.row===displayR&&selected?.col===displayC;
                 const isVal=validMoves.some(m=>m.row===displayR&&m.col===displayC);
-                const isFrom=lastMove?.from.row===displayR&&lastMove?.from.col===displayC;
-                const isTo=lastMove?.to.row===displayR&&lastMove?.to.col===displayC;
-                const isKingCheck=kingInCheckSq?.row===displayR&&kingInCheckSq?.col===displayC;
+                const isFrom=displayLastMove?.from.row===displayR&&displayLastMove?.from.col===displayC;
+                const isTo=displayLastMove?.to.row===displayR&&displayLastMove?.to.col===displayC;
+                const isKingCheck=!isViewingHistory&&kingInCheckSq?.row===displayR&&kingInCheckSq?.col===displayC;
                 let bg=isLight?"#c8a97e":"#8b6340";
                 if(isKingCheck) bg="#c0392b";
                 else if(isSel) bg="#f0c040";
@@ -674,10 +744,14 @@ export default function GamePage() {
                 <div className="border border-zinc-800/50 rounded-2xl p-5 bg-zinc-900/20 space-y-3 text-[10px]">
                   <div className="flex justify-between"><span className="text-zinc-600 uppercase tracking-widest">Stake locked</span><span className="text-amber-400 font-bold">{stakeXlm} XLM</span></div>
                   <div className="flex justify-between"><span className="text-zinc-600 uppercase tracking-widest">Winner gets</span><span className="text-emerald-400 font-bold">{(parseFloat(stakeXlm)*2*0.985).toFixed(2)} XLM</span></div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"/>
+                    <span className="text-zinc-600">Auto-refreshing every 3s</span>
+                  </div>
                 </div>
 
                 <button onClick={loadGameState} className="w-full py-3 rounded-xl border border-zinc-700 text-zinc-400 hover:text-white transition-all text-[9px] font-bold uppercase tracking-widest flex items-center justify-center gap-2">
-                  <RotateCcw size={11}/> Refresh
+                  <RotateCcw size={11}/> Check Status Now
                 </button>
               </div>
             </div>
@@ -748,7 +822,53 @@ export default function GamePage() {
               );
             })()}
 
-            {renderBoard(escrowStatus==="Active"&&(isWhitePlayer||isBlackPlayer))}
+            {renderBoard(escrowStatus==="Active"&&(isWhitePlayer||isBlackPlayer)&&!isViewingHistory)}
+
+            {/* Move navigation */}
+            {/* {moveHistory.length > 0 && (
+              <div className="w-full max-w-[480px] flex items-center justify-between px-3 py-2 rounded-xl border border-zinc-800/50 bg-zinc-900/20">
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={()=>setViewIndex(0)}
+                    disabled={viewIndex===0}
+                    className="p-1.5 rounded-lg text-zinc-600 hover:text-zinc-300 disabled:opacity-30 transition-colors"
+                    title="First move">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+                  </button>
+                  <button
+                    onClick={()=>setViewIndex(v=>{ const cur=v??moveHistory.length; return Math.max(0,cur-1); })}
+                    disabled={viewIndex===0}
+                    className="p-1.5 rounded-lg text-zinc-600 hover:text-zinc-300 disabled:opacity-30 transition-colors"
+                    title="Previous move">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+                  </button>
+                </div>
+
+                <span className="text-[10px] text-zinc-500 font-mono tabular-nums">
+                  {viewIndex===null
+                    ? <span className="text-amber-400/70">Live · Move {moveHistory.length}</span>
+                    : <span>Move {viewIndex+1} <span className="text-zinc-700">of {moveHistory.length}</span></span>
+                  }
+                </span>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={()=>setViewIndex(v=>{ const cur=v??-1; const next=cur+1; return next>=moveHistory.length?null:next; })}
+                    disabled={viewIndex===null}
+                    className="p-1.5 rounded-lg text-zinc-600 hover:text-zinc-300 disabled:opacity-30 transition-colors"
+                    title="Next move">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+                  </button>
+                  <button
+                    onClick={()=>setViewIndex(null)}
+                    disabled={viewIndex===null}
+                    className="p-1.5 rounded-lg text-zinc-600 hover:text-zinc-300 disabled:opacity-30 transition-colors"
+                    title="Latest position">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z"/></svg>
+                  </button>
+                </div>
+              </div>
+            )} */}
 
             {(()=>{
               const myActive=currentTurn===playerColor&&escrowStatus==="Active";
@@ -809,8 +929,16 @@ export default function GamePage() {
                   .map((pair,i)=>(
                     <div key={i} className="flex gap-2 text-[10px] font-mono">
                       <span className="text-zinc-700 w-5 shrink-0">{i+1}.</span>
-                      <span className="text-zinc-300 w-14">{pair[0]}</span>
-                      {pair[1]&&<span className="text-zinc-500">{pair[1]}</span>}
+                      <button
+                        // onClick={()=>setViewIndex(i*2)}
+                        className={`w-14 text-left rounded px-1 transition-colors ${viewIndex===i*2?"bg-amber-500/20 text-amber-400":"text-zinc-300 hover:text-white"}`}>
+                        {pair[0]}
+                      </button>
+                      {pair[1]&&<button
+                        // onClick={()=>setViewIndex(i*2+1)}
+                        className={`w-14 text-left rounded px-1 transition-colors ${viewIndex===i*2+1?"bg-amber-500/20 text-amber-400":"text-zinc-500 hover:text-zinc-300"}`}>
+                        {pair[1]}
+                      </button>}
                     </div>
                   ))}
               </div>
@@ -845,7 +973,7 @@ export default function GamePage() {
               <div>
                 <p className="text-[10px] text-amber-600 uppercase tracking-[0.3em] mb-2">Game Over</p>
                 <h2 className="text-3xl font-black text-white">{winner==="draw"?"Draw!":winner===playerColor?<><span className="text-amber-400">Victory</span> is yours</>:isPlayer?"You lost":"Game ended"}</h2>
-                <p className="text-zinc-500 text-sm mt-2">{winner==="draw"?"Stakes returned - confirm transaction in your wallet":winner===playerColor?`${stroopsToXlm(potSize*985n/1000n)} XLM - confirm transaction in your wallet to receive`:"Better luck next time"}</p>
+                <p className="text-zinc-500 text-sm mt-2">{winner==="draw"?"Stakes returned — confirm transaction in your wallet":winner===playerColor?`${stroopsToXlm(potSize*985n/1000n)} XLM — confirm transaction in your wallet to receive`:"Better luck next time"}</p>
                 {txStatus?.hash&&<a href={`https://stellar.expert/explorer/testnet/tx/${txStatus.hash}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[10px] text-amber-600/70 hover:text-amber-400 mt-2 transition-colors">View tx <ExternalLink size={8}/></a>}
               </div>
               <div className="flex gap-3">
