@@ -3,7 +3,7 @@
 > Stake XLM. Play Chess. Winner claims all. Every move recorded on Soroban.
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-black?style=flat-square)](https://kingfall.vercel.app)
-[![Demo Video](https://img.shields.io/badge/Demo%20Video-Watch-red?style=flat-square)](https://your-demo-video-link.com)
+[![Demo Video](https://img.shields.io/badge/Demo%20Video-Watch-red?style=flat-square)](https:// -demo-video-link.com)
 
 ---
 
@@ -13,7 +13,7 @@
 
 ## Demo Video
 
-> **[Watch full MVP walkthrough →](https://demo-video-link.com)**
+> **[Watch full MVP walkthrough →](https:// -demo-video-link.com)**
 
 The video covers: creating a game, staking XLM, joining as black, making moves (committed onchain), check detection, checkmate/stalemate, and winner payout via escrow.
 
@@ -34,6 +34,9 @@ KingFall is a fully decentralized P2P chess platform built on Stellar/Soroban. T
 ---
 
 ## Architecture
+
+> 📐 **[Full Architecture Document → ARCHITECTURE.md](./ARCHITECTURE.md)**
+> Covers contract state machines, data flow diagrams, Rust structs, chess engine design, and key implementation patterns.
 
 ```
 .
@@ -151,7 +154,7 @@ The following wallets have interacted with the KingFall contracts on Stellar Tes
 
 ## User Feedback
 
-> [View full user feedback document →](https://docs.google.com/document/d/FEEDBACK_DOC)
+> [View full user feedback document →](https://docs.google.com/document/d/ _FEEDBACK_DOC)
 
 Summary of feedback collected from beta testers:
 
@@ -277,6 +280,7 @@ stellar contract invoke --id $GAME_ID --source my-account --network testnet \
 | Smart Contracts | Rust, Soroban SDK 21 |
 | Blockchain | Stellar Testnet / Mainnet |
 | Frontend | Next.js 14, TypeScript |
+| Styling | Tailwind CSS |
 | Wallet | Freighter / StellarWalletsKit |
 | Deployment | Vercel |
 

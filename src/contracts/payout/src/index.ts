@@ -18,7 +18,6 @@ import type {
   u256,
   i256,
   Option,
-  Timepoint,
   Duration,
 } from "@stellar/stellar-sdk/contract";
 export * from "@stellar/stellar-sdk";
