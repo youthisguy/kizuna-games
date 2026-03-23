@@ -202,7 +202,10 @@ async function sendTx(addr: string, kit: any, contractId: string, method: string
     const tx = new TransactionBuilder(account,{fee:"10000",networkPassphrase})
       .addOperation(new Contract(contractId).call(method,...args)).setTimeout(30).build();
     const prepared = await server.prepareTransaction(tx);
-    const {signedTxXdr} = await kit.signTransaction(prepared.toXDR());
+    const {signedTxXdr} = await kit.signTransaction(prepared.toXDR(), {
+      networkPassphrase,
+      address: addr,
+    });
     const response = await server.sendTransaction(TransactionBuilder.fromXDR(signedTxXdr,networkPassphrase));
     if (response.status==="ERROR") throw new Error("Rejected");
     let r = await server.getTransaction(response.hash);

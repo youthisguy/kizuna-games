@@ -7,7 +7,12 @@ import {
   FreighterModule,
   AlbedoModule,
   xBullModule,
+  LobstrModule,
 } from "@creit.tech/stellar-wallets-kit";
+import {
+  WalletConnectModule,
+  WalletConnectAllowedMethods,
+} from "@creit.tech/stellar-wallets-kit/modules/walletconnect.module";
 
 interface WalletContextType {
   address: string | null;
@@ -24,8 +29,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     () =>
       new StellarWalletsKit({
         network: WalletNetwork.TESTNET,
-
-        modules: [new FreighterModule(), new AlbedoModule(), new xBullModule()],
+        modules: [
+          new FreighterModule(),
+          new AlbedoModule(),
+          new xBullModule(),
+          new LobstrModule(),
+          new WalletConnectModule({
+            projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "",
+            name: "KingFall",
+            description:
+              "P2P onchain chess on Stellar. Stake XLM, winner takes all.",
+            url: "https://kingfall-self.vercel.app/",
+            icons: ["https://kingfall-self.vercel.app/icon.png"],
+            method: WalletConnectAllowedMethods.SIGN,
+            network: WalletNetwork.TESTNET,
+          }),
+        ],
       }),
     []
   );
@@ -40,7 +59,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 export function useWallet() {
   const context = useContext(WalletContext);
   if (!context) {
-    throw new Error('useWallet must be used within a WalletProvider');
+    throw new Error("useWallet must be used within a WalletProvider");
   }
   return context;
 }

@@ -2,14 +2,14 @@
 
 > Stake XLM. Play Chess. Winner claims all. Every move recorded on Soroban.
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-black?style=flat-square)](https://kingfall.vercel.app)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-black?style=flat-square)](https://kingfall-self.vercel.app)
 [![Demo Video](https://img.shields.io/badge/Demo%20Video-Watch-red?style=flat-square)](https:// -demo-video-link.com)
 
 ---
 
 ## Live Demo
 
-> **[https://kingfall.vercel.app](https://kingfall.vercel.app)**
+> **[https://kingfall-self.vercel.app](https://kingfall-self.vercel.app)**
 
 ## Demo Video
 
