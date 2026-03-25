@@ -2,7 +2,7 @@
 
 ## Overview
 
-KingFall is a fully onchain P2P chess game on Stellar. There is no backend server. All game state — stakes, moves, outcomes — lives in Soroban smart contracts. The frontend is a stateless Next.js client that reads from and writes to contracts directly via the Soroban RPC.
+KingFall is a fully onchain P2P chess game on Stellar. All game state — stakes, moves, outcomes — lives in Soroban smart contracts. The frontend is a stateless Next.js client that reads from and writes to contracts directly via the Soroban RPC.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐

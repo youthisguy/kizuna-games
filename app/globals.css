@@ -1,4 +1,11 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&display=swap');
 @import "tailwindcss";
+
+
+
+.kingfall-font {
+  font-family: 'Cinzel Decorative', serif;
+}
 
 :root {
   --background: #181818; 

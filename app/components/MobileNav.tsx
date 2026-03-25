@@ -5,6 +5,7 @@ import Link, { LinkProps } from "next/link";
 import { usePathname } from "next/navigation";
 import { Crown, X, Menu } from "lucide-react";
 import WalletConnection from "./WalletConnection";
+import Image from "next/image";
 
 interface NavItem {
   label: string;
@@ -49,15 +50,23 @@ export default function MobileNav({ navItems }: MobileNavProps) {
           <Menu size={20} />
         </button>
 
-        <Link href="/" className="flex items-center gap-2">
-          <Crown
-            size={20}
-            className="text-amber-400"
-            style={{ filter: "drop-shadow(0 0 6px #d97706)" }}
+        <Link href="/" className="flex items-center gap-2.5">
+          <Image
+            src="/KingFall_logo.png"
+            alt="KingFall Logo"
+            width={28}
+            height={28}
+            className="object-contain"
           />
-          <span className="text-lg font-bold tracking-[0.2em] text-white uppercase">
-            King<span className="text-amber-400">Fall</span>
-          </span>
+
+          <h1 className="text-lg uppercase tracking-[0.2em]">
+            <span className="kingfall-font">
+              King
+            </span>
+            <span className="kingfall-font">
+              Fall
+            </span>
+          </h1>
         </Link>
 
         <div className="ml-auto">
@@ -68,7 +77,7 @@ export default function MobileNav({ navItems }: MobileNavProps) {
       {/* ── Backdrop ── */}
       <div
         onClick={() => setOpen(false)}
-        className={`md:hidden fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${
+        className={`md:hidden fixed inset-0 z-60 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${
           open
             ? "opacity-100 pointer-events-auto"
             : "opacity-0 pointer-events-none"
@@ -78,23 +87,31 @@ export default function MobileNav({ navItems }: MobileNavProps) {
 
       {/* ── Slide-in drawer ── */}
       <nav
-        className={`md:hidden fixed top-0 left-0 h-screen w-[72vw] max-w-[280px] z-[70] flex flex-col bg-[#040407] border-r border-zinc-800/60 transform transition-transform duration-300 ease-in-out ${
+        className={`md:hidden fixed top-0 left-0 h-screen w-[72vw] max-w-70 z-70 flex flex-col bg-[#040407] border-r border-zinc-800/60 transform transition-transform duration-300 ease-in-out ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
         aria-label="Mobile navigation"
       >
         {/* Drawer header */}
         <div className="flex items-center justify-between px-4 h-14 border-b border-zinc-800/50 shrink-0">
-          <div className="flex items-center gap-2">
-            <Crown
-              size={22}
-              className="text-amber-400"
-              style={{ filter: "drop-shadow(0 0 8px #d97706)" }}
-            />
-            <span className="text-xl font-bold tracking-[0.2em] text-white uppercase">
-              King<span className="text-amber-400">Fall</span>
+        <Link href="/" className="flex items-center gap-2.5">
+          <Image
+            src="/KingFall_logo.png"
+            alt="KingFall Logo"
+            width={28}
+            height={28}
+            className="object-contain"
+          />
+
+          <h1 className="text-lg uppercase tracking-[0.2em]">
+            <span className="kingfall-font">
+              King
             </span>
-          </div>
+            <span className="kingfall-font">
+              Fall
+            </span>
+          </h1>
+        </Link>
           <button
             onClick={() => setOpen(false)}
             aria-label="Close menu"

@@ -21,7 +21,7 @@ The video covers: creating a game, staking XLM, joining as black, making moves (
 
 ## What is KingFall?
 
-KingFall is a fully decentralized P2P chess platform built on Stellar/Soroban. Two players stake equal amounts of XLM into a Soroban escrow contract. Every move is committed to the game contract as an immutable record. The winner's `finish_game` transaction triggers an automatic payout — the pot minus a 1.5% protocol fee goes directly to their wallet. Draws split the pot. There is no central server, no intermediary.
+KingFall is a P2P chess platform built on Stellar/Soroban. Two players stake equal amounts of XLM into a Soroban escrow contract. Every move is committed to the game contract as an immutable record. The winner's `finish_game` transaction triggers an automatic payout — the pot minus a 1.5% protocol fee goes directly to their wallet. Draws split the pot. There is no central server, no intermediary.
 
 ---
 

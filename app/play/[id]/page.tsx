@@ -1060,7 +1060,7 @@ export default function GamePage() {
                       onClick={() =>
                         interactive && handleSquareClick(displayR, displayC)
                       }
-                      className="relative w-[47.4px] h-[47.4px] sm:w-12 sm:h-12 md:w-14 md:h-14 flex items-center justify-center group"
+                 className="relative w-10.5 h-10.5 min-[390px]:w-10.5 min-[390px]:h-10.5 min-[430px]:w-[47.4px] min-[430px]:h-[47.4px]  sm:w-12 sm:h-12 md:w-14 md:h-14 flex items-center justify-center group"
                       style={{ background: bg }}
                     >
                       {isVal &&
@@ -1095,7 +1095,7 @@ export default function GamePage() {
           {(flipped ? "hgfedcba" : "abcdefgh").split("").map((f) => (
             <div
               key={f}
-              className="w-9 h-4 sm:w-12 sm:h-4 md:w-14 md:h-4 flex items-center justify-center"
+          className="w-10.5 h-4 min-[390px]:w-10.5 min-[430px]:w-[47.4px] sm:w-12 md:w-14 flex items-center justify-center"
             >
               <span className="text-[9px] text-zinc-600">{f}</span>
             </div>

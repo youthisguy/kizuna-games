@@ -135,7 +135,6 @@ interface GameInfo {
   created_at: number;
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
 export default function PlayLobby() {
   const { address: connectedAddress, walletsKit } = useWallet();
   const router = useRouter();
@@ -168,7 +167,7 @@ export default function PlayLobby() {
     setMounted(true);
   }, []);
 
-  // Auto-fetch game lists and escrow balance on mount (no wallet required)
+  // Auto-fetch game lists and escrow balance on mount
   useEffect(() => {
     if (!mounted) return;
     fetchActiveGames();
@@ -186,7 +185,7 @@ export default function PlayLobby() {
       .catch(() => {});
   }, [mounted]);
 
-  // Handle ?join=X invite links (no useSearchParams — avoids Suspense requirement)
+  // Handle ?join=X invite links 
   useEffect(() => {
     if (!mounted) return;
     const joinParam = new URLSearchParams(window.location.search).get("join");

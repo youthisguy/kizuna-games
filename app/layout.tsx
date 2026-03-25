@@ -6,11 +6,15 @@ import Link from "next/link";
 import { Crown } from "lucide-react";
 import { Suspense } from "react";
 import MobileNav from "./components/MobileNav";
+import Image from "next/image";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
-  title: "KINGFALL | Onchain Chess Protocol",
-  description:
-    "Play chess onchain. Stake, compete, and win on Stellar Soroban.",
+  icons: {
+    icon: "/KingFall_logo.png",
+    shortcut: "/KingFall_logo.png",
+    apple: "/KingFall_logo.png",
+  },
 };
 
 export const navItems = [
@@ -122,6 +126,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <Analytics />
       <body className="antialiased bg-[#040407]">
         <WalletProvider>
           <div className="min-h-screen flex">
@@ -129,16 +134,18 @@ export default function RootLayout({
             <aside className="fixed top-0 left-0 h-screen w-64 z-50 flex-col bg-[#040407]/90 backdrop-blur-xl border-r border-zinc-800/50 hidden md:flex">
               <header className="flex items-center justify-between mb-8 p-4">
                 <div className="flex items-center gap-3">
-                  <Crown
-                    size={26}
-                    className="text-amber-400"
-                    style={{ filter: "drop-shadow(0 0 8px #d97706)" }}
+                  <Image
+                    src="/KingFall_logo.png"
+                    alt="KingFall Logo"
+                    width={36}
+                    height={36}
+                    className="object-contain"
                   />
-                  <div>
-                    <h1 className="text-2xl font-bold tracking-[0.2em] text-white uppercase">
-                      King<span className="text-amber-400">Fall</span>
-                    </h1>
-                  </div>
+
+                  <h1 className="kingfall-font text-2xl font-bold tracking-[0.2em] uppercase text-white">
+                    <span className="">King</span>
+                    <span className=" ">Fall</span>
+                  </h1>
                 </div>
               </header>
 
