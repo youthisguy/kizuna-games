@@ -154,7 +154,7 @@ The following wallets have interacted with the KingFall contracts on Stellar Tes
 
 ## User Feedback
 
-> [View full user feedback document →](https://docs.google.com/document/d/ _FEEDBACK_DOC)
+> [View user feedback document →](./USER_FEEDBACK.md)
 
 Summary of feedback collected from beta testers:
 

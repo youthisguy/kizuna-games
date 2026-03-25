@@ -61,8 +61,8 @@ export default function MobileNav({ navItems }: MobileNavProps) {
         </Link>
 
         <div className="ml-auto">
-  <WalletConnection compact />
-</div>
+          <WalletConnection compact />
+        </div>
       </header>
 
       {/* ── Backdrop ── */}
@@ -108,21 +108,31 @@ export default function MobileNav({ navItems }: MobileNavProps) {
         <div className="flex-1 px-3 pt-4 flex flex-col gap-1 overflow-y-auto">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
+            const isPlay = item.href === "/play";
+            const isDisabled = !isPlay;
+
             return (
               <Link
                 key={item.label}
-                href={item.href}
+                href={isDisabled ? "#" : item.href}
+                onClick={isDisabled ? (e) => e.preventDefault() : undefined}
+                aria-disabled={isDisabled}
+                tabIndex={isDisabled ? -1 : undefined}
                 className={`group flex items-center gap-3 px-3 py-3 rounded-xl border transition-all duration-200 ${
-                  isActive
+                  isDisabled
+                    ? "opacity-30 cursor-not-allowed border-transparent pointer-events-none select-none"
+                    : isActive
                     ? "text-emerald-400 bg-emerald-500/8 border-emerald-500/20"
-                    : "text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/5 border-transparent hover:border-emerald-500/10"
+                    : "text-zinc-400 hover:text-amber-400 hover:bg-emerald-500/5 border-transparent hover:border-emerald-500/10"
                 }`}
               >
                 <span
                   className={`transition-colors duration-200 ${
-                    isActive
-                      ? "text-emerald-400"
-                      : "text-zinc-500 group-hover:text-emerald-400"
+                    isDisabled
+                      ? "text-zinc-500"
+                      : isActive
+                      ? "text-amber-400"
+                      : "text-zinc-500 group-hover:text-amber-400"
                   }`}
                 >
                   {item.icon}
@@ -130,8 +140,8 @@ export default function MobileNav({ navItems }: MobileNavProps) {
                 <span className="font-semibold text-sm tracking-wide font-mono uppercase">
                   {item.label}
                 </span>
-                {isActive && (
-                  <span className="ml-auto text-emerald-500 text-xs">→</span>
+                {isActive && !isDisabled && (
+                  <span className="ml-auto text-amber-500 text-xs">→</span>
                 )}
               </Link>
             );
@@ -142,8 +152,6 @@ export default function MobileNav({ navItems }: MobileNavProps) {
           <WalletConnection />
         </div>
       </nav>
-      {/* 
-      <div className="md:hidden h-14 w-full shrink-0" aria-hidden="true" /> */}
     </>
   );
 }
