@@ -139,8 +139,11 @@ export default function PlayLobby() {
   const { address: connectedAddress, walletsKit } = useWallet();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+  const [myGames, setMyGames] = useState<GameInfo[]>([]);
+  const [myGamesLoading, setMyGamesLoading] = useState(false);
+  const [showMyGames, setShowMyGames] = useState(true);
 
-  const [stakeAmount, setStakeAmount] = useState("5");
+  const [stakeAmount, setStakeAmount] = useState("100");
   const [xlmBalance, setXlmBalance] = useState("0");
   const [loading, setLoading] = useState(false);
   const [txStatus, setTxStatus] = useState<{
@@ -185,7 +188,7 @@ export default function PlayLobby() {
       .catch(() => {});
   }, [mounted]);
 
-  // Handle ?join=X invite links 
+  // Handle ?join=X invite links
   useEffect(() => {
     if (!mounted) return;
     const joinParam = new URLSearchParams(window.location.search).get("join");
@@ -203,6 +206,51 @@ export default function PlayLobby() {
       setXlmBalance(n ? parseFloat(n.balance).toFixed(2) : "0");
     } catch {}
   }, [connectedAddress]);
+
+  const fetchMyGames = useCallback(async () => {
+    if (!connectedAddress) return;
+    setMyGamesLoading(true);
+    try {
+      const raw = await simRead(
+        ESCROW_CONTRACT_ID,
+        "get_player_games",
+        [new Address(connectedAddress).toScVal()],
+        connectedAddress
+      );
+      const ids = normalizeIds(raw);
+      const games = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const d = await simRead(
+              ESCROW_CONTRACT_ID,
+              "get_game",
+              [nativeToScVal(id, { type: "u64" })],
+              connectedAddress
+            );
+            return {
+              id: id.toString(),
+              status: parseStatus(d.status),
+              stake: (Number(d.stake) / 10_000_000).toFixed(2),
+              white: d.white,
+              black: d.black,
+              created_at: Number(d.created_at),
+            } as GameInfo;
+          } catch {
+            return null;
+          }
+        })
+      );
+      setMyGames(games.filter(Boolean) as GameInfo[]);
+    } catch (e) {
+      console.error("[fetchMyGames]", e);
+    } finally {
+      setMyGamesLoading(false);
+    }
+  }, [connectedAddress]);
+
+  useEffect(() => {
+    if (mounted && connectedAddress) fetchMyGames();
+  }, [mounted, connectedAddress, fetchMyGames]);
 
   useEffect(() => {
     if (mounted) loadBalance();
@@ -709,48 +757,37 @@ export default function PlayLobby() {
                 </>
               ) : (
                 <div className="rounded-2xl p-6 text-center space-y-4 relative overflow-hidden border border-dashed border-zinc-800">
-                <div className="flex justify-center">
-                  <canvas
-                    ref={(canvas) => {
-                      if (!canvas) return;
-                      const ctx = canvas.getContext("2d")!;
-                      const LIGHT = "#c8a97e", DARK = "#8b6340";
-                      const WH: Record<string, string> = {
-                        K: "♚", Q: "♛", R: "♜", B: "♝", N: "♞", P: "♟︎",
-                        k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟︎",
-                      };
-              
-                      const sz = 28, cols = 8, rows = 8;
-                      const W = sz * cols, H = sz * rows;
-                      canvas.width = W;
-                      canvas.height = H;
-              
-                      let board: (string | null)[][] = [
-                        ["r", "n", "b", "q", "k", "b", "n", "r"],
-                        ["p", "p", "p", "p", "p", "p", "p", "p"],
-                        [null, null, null, null, null, null, null, null],
-                        [null, null, null, null, null, null, null, null],
-                        [null, null, null, null, null, null, null, null],
-                        [null, null, null, null, null, null, null, null],
-                        ["P", "P", "P", "P", "P", "P", "P", "P"],
-                        ["R", "N", "B", "Q", "K", "B", "N", "R"],
-                      ];
-              
-                      const moves = [
-                        { from: [6, 4], to: [4, 4] },
-                        { from: [1, 4], to: [3, 4] },
-                        { from: [7, 6], to: [5, 5] },
-                        { from: [0, 1], to: [2, 2] },
-                        { from: [6, 3], to: [4, 3] },
-                        { from: [1, 3], to: [3, 3] },
-                      ];
-              
-                      let moveIdx = 0, animFrac = 0, animating = false;
-                      let animFrom: number[] | null = null, animTo: number[] | null = null;
-                      let animPiece: string | null = null, pause = 0;
-              
-                      function resetBoard() {
-                        board = [
+                  <div className="flex justify-center">
+                    <canvas
+                      ref={(canvas) => {
+                        if (!canvas) return;
+                        const ctx = canvas.getContext("2d")!;
+                        const LIGHT = "#c8a97e",
+                          DARK = "#8b6340";
+                        const WH: Record<string, string> = {
+                          K: "♚",
+                          Q: "♛",
+                          R: "♜",
+                          B: "♝",
+                          N: "♞",
+                          P: "♟︎",
+                          k: "♚",
+                          q: "♛",
+                          r: "♜",
+                          b: "♝",
+                          n: "♞",
+                          p: "♟︎",
+                        };
+
+                        const sz = 28,
+                          cols = 8,
+                          rows = 8;
+                        const W = sz * cols,
+                          H = sz * rows;
+                        canvas.width = W;
+                        canvas.height = H;
+
+                        let board: (string | null)[][] = [
                           ["r", "n", "b", "q", "k", "b", "n", "r"],
                           ["p", "p", "p", "p", "p", "p", "p", "p"],
                           [null, null, null, null, null, null, null, null],
@@ -760,88 +797,158 @@ export default function PlayLobby() {
                           ["P", "P", "P", "P", "P", "P", "P", "P"],
                           ["R", "N", "B", "Q", "K", "B", "N", "R"],
                         ];
-                        pause = 50;
-                      }
-              
-                      function drawPiece(p: string, x: number, y: number) {
-                        const isWhite = p === p.toUpperCase();
-                        const glyph = WH[p];
-                        const fontSize = sz * 0.75; 
-              
-                        ctx.save();
-                        ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-                        ctx.textAlign = "center";
-                        ctx.textBaseline = "middle";
-              
-                        if (isWhite) {
-                          ctx.fillStyle = "#ffffff"; // Pure white
-                        } else {
-                          ctx.fillStyle = "#000000"; // Pure black
+
+                        const moves = [
+                          { from: [6, 4], to: [4, 4] },
+                          { from: [1, 4], to: [3, 4] },
+                          { from: [7, 6], to: [5, 5] },
+                          { from: [0, 1], to: [2, 2] },
+                          { from: [6, 3], to: [4, 3] },
+                          { from: [1, 3], to: [3, 3] },
+                        ];
+
+                        let moveIdx = 0,
+                          animFrac = 0,
+                          animating = false;
+                        let animFrom: number[] | null = null,
+                          animTo: number[] | null = null;
+                        let animPiece: string | null = null,
+                          pause = 0;
+
+                        function resetBoard() {
+                          board = [
+                            ["r", "n", "b", "q", "k", "b", "n", "r"],
+                            ["p", "p", "p", "p", "p", "p", "p", "p"],
+                            [null, null, null, null, null, null, null, null],
+                            [null, null, null, null, null, null, null, null],
+                            [null, null, null, null, null, null, null, null],
+                            [null, null, null, null, null, null, null, null],
+                            ["P", "P", "P", "P", "P", "P", "P", "P"],
+                            ["R", "N", "B", "Q", "K", "B", "N", "R"],
+                          ];
+                          pause = 50;
                         }
-                        ctx.fillText(glyph, x, y + 1);
-                        ctx.restore();
-                      }
-              
-                      function drawBoard() {
-                        ctx.clearRect(0, 0, W, H);
-                        for (let r = 0; r < rows; r++) {
-                          for (let c = 0; c < cols; c++) {
-                            ctx.fillStyle = (r + c) % 2 === 0 ? LIGHT : DARK;
-                            ctx.fillRect(c * sz, r * sz, sz, sz);
+
+                        function drawPiece(p: string, x: number, y: number) {
+                          const isWhite = p === p.toUpperCase();
+                          const glyph = WH[p];
+                          const fontSize = sz * 0.75;
+
+                          ctx.save();
+                          ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+                          ctx.textAlign = "center";
+                          ctx.textBaseline = "middle";
+
+                          if (isWhite) {
+                            ctx.fillStyle = "#ffffff"; // Pure white
+                          } else {
+                            ctx.fillStyle = "#000000"; // Pure black
                           }
+                          ctx.fillText(glyph, x, y + 1);
+                          ctx.restore();
                         }
-                        if (animFrom) {
-                          ctx.fillStyle = "rgba(240,192,64,0.4)";
-                          ctx.fillRect(animFrom[1] * sz, animFrom[0] * sz, sz, sz);
-                        }
-                        if (animTo) {
-                          ctx.fillStyle = "rgba(240,192,64,0.4)";
-                          ctx.fillRect(animTo[1] * sz, animTo[0] * sz, sz, sz);
-                        }
-                        for (let r = 0; r < rows; r++) {
-                          for (let c = 0; c < cols; c++) {
-                            const p = board[r][c];
-                            if (p && !(animating && animFrom && animFrom[0] === r && animFrom[1] === c)) {
-                              drawPiece(p, c * sz + sz / 2, r * sz + sz / 2);
+
+                        function drawBoard() {
+                          ctx.clearRect(0, 0, W, H);
+                          for (let r = 0; r < rows; r++) {
+                            for (let c = 0; c < cols; c++) {
+                              ctx.fillStyle = (r + c) % 2 === 0 ? LIGHT : DARK;
+                              ctx.fillRect(c * sz, r * sz, sz, sz);
                             }
                           }
+                          if (animFrom) {
+                            ctx.fillStyle = "rgba(240,192,64,0.4)";
+                            ctx.fillRect(
+                              animFrom[1] * sz,
+                              animFrom[0] * sz,
+                              sz,
+                              sz
+                            );
+                          }
+                          if (animTo) {
+                            ctx.fillStyle = "rgba(240,192,64,0.4)";
+                            ctx.fillRect(
+                              animTo[1] * sz,
+                              animTo[0] * sz,
+                              sz,
+                              sz
+                            );
+                          }
+                          for (let r = 0; r < rows; r++) {
+                            for (let c = 0; c < cols; c++) {
+                              const p = board[r][c];
+                              if (
+                                p &&
+                                !(
+                                  animating &&
+                                  animFrom &&
+                                  animFrom[0] === r &&
+                                  animFrom[1] === c
+                                )
+                              ) {
+                                drawPiece(p, c * sz + sz / 2, r * sz + sz / 2);
+                              }
+                            }
+                          }
+                          if (animating && animFrom && animTo && animPiece) {
+                            const x =
+                              (animFrom[1] +
+                                (animTo[1] - animFrom[1]) * animFrac) *
+                                sz +
+                              sz / 2;
+                            const y =
+                              (animFrom[0] +
+                                (animTo[0] - animFrom[0]) * animFrac) *
+                                sz +
+                              sz / 2;
+                            drawPiece(animPiece, x, y);
+                          }
                         }
-                        if (animating && animFrom && animTo && animPiece) {
-                          const x = (animFrom[1] + (animTo[1] - animFrom[1]) * animFrac) * sz + sz / 2;
-                          const y = (animFrom[0] + (animTo[0] - animFrom[0]) * animFrac) * sz + sz / 2;
-                          drawPiece(animPiece, x, y);
+
+                        function step() {
+                          if (pause > 0) {
+                            pause--;
+                            drawBoard();
+                            return;
+                          }
+                          if (!animating) {
+                            if (moveIdx >= moves.length) {
+                              moveIdx = 0;
+                              resetBoard();
+                              return;
+                            }
+                            const mv = moves[moveIdx];
+                            animFrom = mv.from;
+                            animTo = mv.to;
+                            animPiece = board[mv.from[0]][mv.from[1]];
+                            board[mv.from[0]][mv.from[1]] = null;
+                            animating = true;
+                            animFrac = 0;
+                          }
+                          animFrac = Math.min(1, animFrac + 0.055);
+                          drawBoard();
+                          if (animFrac >= 1) {
+                            board[animTo![0]][animTo![1]] = animPiece;
+                            animating = false;
+                            animFrac = 0;
+                            moveIdx++;
+                            pause = 30;
+                          }
                         }
-                      }
-              
-                      function step() {
-                        if (pause > 0) { pause--; drawBoard(); return; }
-                        if (!animating) {
-                          if (moveIdx >= moves.length) { moveIdx = 0; resetBoard(); return; }
-                          const mv = moves[moveIdx];
-                          animFrom = mv.from; animTo = mv.to;
-                          animPiece = board[mv.from[0]][mv.from[1]];
-                          board[mv.from[0]][mv.from[1]] = null;
-                          animating = true; animFrac = 0;
-                        }
-                        animFrac = Math.min(1, animFrac + 0.055);
+
                         drawBoard();
-                        if (animFrac >= 1) {
-                          board[animTo![0]][animTo![1]] = animPiece;
-                          animating = false; animFrac = 0; moveIdx++; pause = 30;
-                        }
-                      }
-              
-                      drawBoard();
-                      const interval = setInterval(step, 40);
-                      return () => clearInterval(interval);
-                    }}
-                    width={224}
-                    height={224}
-                    style={{ opacity: 0.9, maxWidth: "100%" }}
-                  />
+                        const interval = setInterval(step, 40);
+                        return () => clearInterval(interval);
+                      }}
+                      width={224}
+                      height={224}
+                      style={{ opacity: 0.9, maxWidth: "100%" }}
+                    />
+                  </div>
+                  <p className="text-zinc-500 text-sm">
+                    Connect your wallet to create or join a game
+                  </p>
                 </div>
-                <p className="text-zinc-500 text-sm">Connect your wallet to create or join a game</p>
-              </div>
               )}
 
               {/* Stats */}
@@ -881,6 +988,60 @@ export default function PlayLobby() {
 
           {/* Mobile games panel */}
           <div className="xl:hidden w-full mt-2 space-y-2">
+            {/* My Games accordion */}
+            <div className="border border-zinc-800 rounded-2xl overflow-hidden bg-zinc-900/20">
+              <button
+                onClick={() => {
+                  setShowMyGames((s) => !s);
+                  if (!showMyGames) fetchMyGames();
+                }}
+                className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-zinc-800/30 transition-colors"
+              >
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+                  <Users size={11} className="text-amber-400" /> My Games
+                </span>
+                <div className="flex items-center gap-2">
+                  {myGames.length > 0 && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-black">
+                      {myGames.length}
+                    </span>
+                  )}
+                  <ChevronRight
+                    size={13}
+                    className={`text-zinc-600 transition-transform ${
+                      showMyGames ? "rotate-90" : ""
+                    }`}
+                  />
+                </div>
+              </button>
+              {showMyGames && (
+                <div className="border-t border-zinc-800/50 px-4 pb-3 pt-1 max-h-64 overflow-y-auto">
+                  {myGamesLoading ? (
+                    <div className="flex items-center gap-2 py-4 justify-center">
+                      <RotateCcw
+                        size={12}
+                        className="animate-spin text-zinc-600"
+                      />
+                      <span className="text-[10px] text-zinc-600">
+                        Loading...
+                      </span>
+                    </div>
+                  ) : myGames.length === 0 ? (
+                    <p className="text-[10px] text-zinc-600 text-center py-4">
+                      No games yet
+                    </p>
+                  ) : (
+                    myGames.map((g) => <GameRow key={g.id} g={g} />)
+                  )}
+                  <button
+                    onClick={fetchMyGames}
+                    className="w-full mt-2 py-1.5 text-[9px] text-zinc-600 hover:text-zinc-400 uppercase tracking-widest flex items-center justify-center gap-1"
+                  >
+                    <RotateCcw size={9} /> Refresh
+                  </button>
+                </div>
+              )}
+            </div>
             {/* Open Games accordion */}
             <div className="border border-zinc-800 rounded-2xl overflow-hidden bg-zinc-900/20">
               <button
@@ -1014,9 +1175,66 @@ export default function PlayLobby() {
             </div>
           </div>
 
-          {/* Desktop sidebar — unchanged */}
+          {/* Desktop sidebar */}
           <div className="hidden xl:flex flex-col gap-3 w-72 shrink-0">
             <div className="border border-zinc-800 rounded-2xl overflow-hidden bg-zinc-900/20 sticky top-8">
+              {/* My Games */}
+              {connectedAddress && (
+                <>
+                  <button
+                    onClick={() => {
+                      setShowMyGames((s) => !s);
+                      if (!showMyGames) fetchMyGames();
+                    }}
+                    className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-zinc-800/30 transition-colors"
+                  >
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+                      <Users size={11} className="text-amber-400" /> My Games
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {myGames.length > 0 && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-black">
+                          {myGames.length}
+                        </span>
+                      )}
+                      <ChevronRight
+                        size={13}
+                        className={`text-zinc-600 transition-transform ${
+                          showMyGames ? "rotate-90" : ""
+                        }`}
+                      />
+                    </div>
+                  </button>
+                  {showMyGames && (
+                    <div className="border-t border-zinc-800/50 px-4 pb-3 pt-1 max-h-64 overflow-y-auto">
+                      {myGamesLoading ? (
+                        <div className="flex items-center gap-2 py-4 justify-center">
+                          <RotateCcw
+                            size={12}
+                            className="animate-spin text-zinc-600"
+                          />
+                          <span className="text-[10px] text-zinc-600">
+                            Loading...
+                          </span>
+                        </div>
+                      ) : myGames.length === 0 ? (
+                        <p className="text-[10px] text-zinc-600 text-center py-4">
+                          No games yet
+                        </p>
+                      ) : (
+                        myGames.map((g) => <GameRow key={g.id} g={g} />)
+                      )}
+                      <button
+                        onClick={fetchMyGames}
+                        className="w-full mt-2 py-1.5 text-[9px] text-zinc-600 hover:text-zinc-400 uppercase tracking-widest flex items-center justify-center gap-1"
+                      >
+                        <RotateCcw size={9} /> Refresh
+                      </button>
+                    </div>
+                  )}
+                  <div className="border-t border-zinc-800/50" />
+                </>
+              )}
               {/* Open Games */}
               <button
                 onClick={() => {

@@ -1,6 +1,6 @@
 # ♚ KingFall — P2P Onchain Chess on Stellar
 
-> Stake XLM. Play Chess. Winner claims all. Every move recorded on Soroban.
+> Stake XLM. Play Chess. Winner claims all. Every move recorded onchain.
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-black?style=flat-square)](https://kingfall-self.vercel.app)
 [![Demo Video](https://img.shields.io/badge/Demo%20Video-Watch-red?style=flat-square)](https://youtu.be/hs7aOUaPQqw?si=CwC-NiZL54xVmsc8)
@@ -285,7 +285,7 @@ Feedback collected via Google Form from 5 real testnet users (average rating 4.4
 ### Shipped — Iteration 1
 - **Castling support** — Afolabi Nelson reported being unable to castle. Implemented kingside and queenside castling per standard chess rules. [View commit →](https://github.com/youthisguy/kingfall/commit/fa3b278608eab3c97964a773b773c4194ce58874)
 - **En passant capture** — en passant was rejected during testing. Implemented per standard rules. [View commit →](https://github.com/youthisguy/kingfall/commit/fa3b278608eab3c97964a773b773c4194ce58874)
-- **Active games visible without game ID** — Darhmie Lola couldn't find her created games without a game ID. The lobby now auto-loads all open and active games on mount. [View commit →]()
+- **Active games visible without game ID** — Darhmie Lola couldn't find her created games without a game ID. The lobby now auto-loads all open and active games on mount. [View commit →](https://github.com/youthisguy/kingfall/commit/ede1b32af326a716aaabd8be2d5493591e1be67a)
 
 ### Planned — Iteration 2
 Directly from form responses:

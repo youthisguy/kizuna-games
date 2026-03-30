@@ -135,7 +135,7 @@ User feedback was collected via a structured Google Form shared with all testers
 
 **Change:** The lobby sidebar now auto-loads and displays all open and active games on page load without needing to search by ID. Open Games and All Games sections expand automatically so players can see and join their games directly.
 
-**Commit:** [Auto-load game lists on lobby mount →]()
+**Commit:** [Auto-load game lists on lobby mount →](https://github.com/youthisguy/kingfall/commit/ede1b32af326a716aaabd8be2d5493591e1be67a)
 
 ---
 
