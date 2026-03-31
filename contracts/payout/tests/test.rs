@@ -318,8 +318,8 @@ fn test_transfer_admin() {
     let new_admin = Address::generate(&env);
     let escrow    = Address::generate(&env);
     let nft       = Address::generate(&env);
-    let token     = deploy_token(&env, &admin);
-    let to        = Address::generate(&env);
+    let _token     = deploy_token(&env, &admin);
+    let _to        = Address::generate(&env);
 
     client.initialize(&admin, &escrow, &nft);
     client.transfer_admin(&new_admin);
