@@ -133,29 +133,7 @@ KingFall is a P2P chess platform built on Stellar/Soroban. Two players stake equ
 - Pawn promotion (auto-queens)
 - Board flips for black player
 - Last move highlighted (origin + destination squares) for both players
- 
----
- 
-## User Wallet Addresses (Testnet)
- 
-The following wallets have interacted with the KingFall contracts on Stellar Testnet, verifiable on [Stellar Expert](https://stellar.expert/explorer/testnet):
- 
-| # | Address | Role |
-|---|---|---|
-| 1 | `GCLMTJHQ4MRYCQVCYTXQGTRYVURPCV2MXLFA7GCDLFRJSD6BGGY57X2U` | Tester |
-| 2 | `GDHHHFWLPFROQXLRWAJSB2ENEJRBAMX64CAJAJCVKQVIWC2SVRNZ3DIB` | Tester |
-| 3 | `GCJ3BEALSI2QYJNWSZ2OGAEZ77FMYFXHJ6QJWHT6SLXJ5AHCSGQZ5SLV` | Tester |
-| 4 | `GADHOONGFGODLILJJYGMAB3BPD24TGYK7SUTWY4DPIW4VGBOBXJG6UBL` | Tester |
-| 5 | `GASEAJFVTFWO2UULVQQJT543WB65PVI7MQGTV446R7A36GUTLLJM53LE` | Tester |
- 
-> View contract interactions: [Escrow on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CCSDLJLDIJSAOKFLX2QWCOVLENA4FFN2EMSGJRFKTIBYY4UUA2HKDGBN) · [Game on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CBBIQM6V5XEF5PBB7DARQ2Q26WHBHKLPYKD4ELHOQ7YBZ4CMJXC2DO54)
- 
----
- 
-## User Feedback
- 
-> [View user feedback document + exported Excel sheet →](./USER_FEEDBACK.md)
- 
+
 ---
  
 ## Getting Started
@@ -277,27 +255,47 @@ stellar contract invoke --id $GAME_ID --source my-account --network testnet \
 | Deployment | Vercel |
  
 ---
+
+## User Wallet Addresses (Testnet)
  
-## Improvements Based on User Feedback
+The following wallets have interacted with the KingFall contracts on Stellar Testnet, verifiable on [Stellar Expert](https://stellar.expert/explorer/testnet):
  
-Feedback collected via Google Form from 5 real testnet users (average rating 4.4/5). Full responses in [USER_FEEDBACK.md](./USER_FEEDBACK.md) and [user-feedback.xlsx](./user-feedback.xlsx).
+| # | Address | Role |
+|---|---|---|
+| 1 | `GCLMTJHQ4MRYCQVCYTXQGTRYVURPCV2MXLFA7GCDLFRJSD6BGGY57X2U` | Tester |
+| 2 | `GDHHHFWLPFROQXLRWAJSB2ENEJRBAMX64CAJAJCVKQVIWC2SVRNZ3DIB` | Tester |
+| 3 | `GCJ3BEALSI2QYJNWSZ2OGAEZ77FMYFXHJ6QJWHT6SLXJ5AHCSGQZ5SLV` | Tester |
+| 4 | `GADHOONGFGODLILJJYGMAB3BPD24TGYK7SUTWY4DPIW4VGBOBXJG6UBL` | Tester |
+| 5 | `GASEAJFVTFWO2UULVQQJT543WB65PVI7MQGTV446R7A36GUTLLJM53LE` | Tester |
+ 
+> View contract interactions: [Escrow on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CCSDLJLDIJSAOKFLX2QWCOVLENA4FFN2EMSGJRFKTIBYY4UUA2HKDGBN) · [Game on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CBBIQM6V5XEF5PBB7DARQ2Q26WHBHKLPYKD4ELHOQ7YBZ4CMJXC2DO54)
+ 
+---
+
+## Improvements/User Feedback
+
+> [User Feedback Excel sheet →](./user-feedback.xlsx)
  
 ### Shipped — Iteration 1
-- **Castling support** — Afolabi Nelson reported being unable to castle. Implemented kingside and queenside castling per standard chess rules. [View commit →](https://github.com/youthisguy/kingfall/commit/fa3b278608eab3c97964a773b773c4194ce58874)
+- **Castling support** — Implemented kingside and queenside castling per standard chess rules. [View commit →](https://github.com/youthisguy/kingfall/commit/fa3b278608eab3c97964a773b773c4194ce58874)
 - **En passant capture** — en passant was rejected during testing. Implemented per standard rules. [View commit →](https://github.com/youthisguy/kingfall/commit/fa3b278608eab3c97964a773b773c4194ce58874)
-- **Active games visible without game ID** — Darhmie Lola couldn't find her created games without a game ID. The lobby now auto-loads all open and active games on mount. [View commit →](https://github.com/youthisguy/kingfall/commit/ede1b32af326a716aaabd8be2d5493591e1be67a)
+- **Active games visible without game ID** — The lobby now auto-loads all user's games (created and joined) on mount. [View commit →](https://github.com/youthisguy/kingfall/commit/ede1b32af326a716aaabd8be2d5493591e1be67a)
 
 ### Planned — Iteration 2
-Directly from form responses:
 
-- **In-game chat** — live messaging with opponent during a game (Eno Johnny)
-- **Anti-cheat / dispute system** — ability to flag or report suspected cheating (Moses Oladejo)
+Directly from user feedback:
 
+- **In-game chat** — Live messaging with opponent during a game 
+- **Anti-cheat / dispute system** — Ability to flag or report suspected cheating
  
 ---
  
 ## Roadmap
- 
-- [ ] NFT mint on game completion (SEP-50)
-- [ ] Season leaderboard and prize pool (payout contract)
-- [ ] Mainnet deployment
+
+Future Plans for Kingfall:
+
+- **ELO Ranking System** — Trustless onchain ELO engine (K=32) that automatically updates after every completed game. New players start at 1200.
+- **Rich Onchain Player Profiles** — Dedicated profile page showing ELO rating, win/loss/draw statistics, win rate, current streak, total XLM won, and rating history.
+- **Achievement Badges as NFTs** — SEP-50 compliant NFTs automatically minted for milestones (First Win, 5/10/25 win streaks, rating thresholds like 1400/1600/1800+, tournament wins, etc.).
+- **Leaderboards** — Global and seasonal ELO leaderboards with top players eligible for prize pools from the protocol fee treasury.
+- **Tournament Support** — Create or join bracket-style and Swiss-system tournaments with entry fees and automated onchain prize distribution.
