@@ -247,7 +247,7 @@ function getPseudoMovesRaw(board: Board, sq: Square): Square[] {
         if (canL(sq.row+dr!,sq.col+dc!)) moves.push({row:sq.row+dr!,col:sq.col+dc!});
       });
       break;
-    case "B": slide([-1,-1,-1,1],[-1,1,1,-1]); break;
+    case "B": slide([-1,-1,1,1],[-1,1,-1,1]); break;
     case "R": slide([-1,1,0,0],[0,0,-1,1]); break;
     case "Q": slide([-1,1,0,0,-1,-1,1,1],[0,0,-1,1,-1,1,-1,1]); break;
     case "K":
@@ -302,7 +302,7 @@ function getPseudoMoves(
         if (canL(sq.row+dr!,sq.col+dc!)) moves.push({row:sq.row+dr!,col:sq.col+dc!});
       });
       break;
-    case "B": slide([-1,-1,-1,1],[-1,1,1,-1]); break;
+      case "B": slide([-1,-1,1,1],[-1,1,-1,1]); break;
     case "R": slide([-1,1,0,0],[0,0,-1,1]); break;
     case "Q": slide([-1,1,0,0,-1,-1,1,1],[0,0,-1,1,-1,1,-1,1]); break;
     case "K": {
