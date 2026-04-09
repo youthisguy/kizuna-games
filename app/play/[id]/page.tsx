@@ -996,7 +996,7 @@ export default function GamePage() {
   }, [moveHistory.length]);
 
   // ── Chess ─────────────────────────────────────────────────────────────────
-  const handleSquareClick = (row: number, col: number) => {
+  const handleSquareClick = async (row: number, col: number) => {
     if (escrowStatus !== "Active") return;
     if (viewIndex !== null) return; // viewing history — must return to live first
     if (currentTurn !== playerColor) return;
@@ -1097,10 +1097,24 @@ export default function GamePage() {
           isKingMove: board[selected.row][selected.col]?.type === "K",
         });
         if (connectedAddress && walletsKit) {
-          const gcId = gameContractId ?? escrowId;
-          if (gcId) {
-            setMovePending(true);
-            sendTx(
+          const gcId = gameContractId;
+          if (!gcId) {
+            console.error("No gameContractId - move only local");
+            return;
+          }
+        
+          const previousBoard = [...board.map(row => [...row])];   
+          const previousMoveHistory = [...moveHistory];
+          const previousFenHistory = [...fenHistory];
+          const previousTurn = currentTurn;
+          const previousCastling = { ...castlingRights };
+          const previousEp = epSquare;
+          const previousInCheck = inCheck;
+        
+          setMovePending(true);
+        
+          try {
+            const txResult = await sendTx(
               connectedAddress,
               walletsKit,
               GAME_CONTRACT_ID,
@@ -1112,18 +1126,41 @@ export default function GamePage() {
                 nativeToScVal(fen, { type: "string" }),
               ],
               (s) => {
-                console.log("commit_move status →", s);
                 if (s.type !== "pending") setMovePending(false);
+                if (s.type === "success") {
+                  setTxStatus({ type: "success", msg: "Move confirmed on-chain", hash: s.hash });
+                }
               }
-            ).catch((err) => {
-              console.error("❌ commit_move sendTx failed", err);
-              setMovePending(false);
+            );
+        
+            if (!txResult) {
+              throw new Error("Transaction failed or was rejected");
+            }
+        
+          } catch (err: any) {
+            console.error("❌ commit_move failed", err);
+        
+            // REVERT all local state
+            setBoard(previousBoard);
+            setMoveHistory(previousMoveHistory);
+            setFenHistory(previousFenHistory);
+            setCurrentTurn(previousTurn);
+            setCastlingRights(previousCastling);
+            setEpSquare(previousEp);
+            setInCheck(previousInCheck);
+            setLastMove(null);
+            setSelected(null);
+            setValidMoves([]);
+        
+            // Show clear error to user
+            setTxStatus({
+              type: "error",
+              msg: `Error executing Move "${san}"`,
             });
-          } else {
-            console.error("❌ No gcId for commit_move!");
+        
+            // Optional: alert for extra visibility
+            alert(`Move failed: ${err.message || "Contract rejected the move"}`);
           }
-        } else {
-          console.warn("⚠️ Not connected or no wallet kit - move only local");
         }
         return;
       }
