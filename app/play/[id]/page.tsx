@@ -671,8 +671,8 @@ export default function GamePage() {
     bQ: true,
   });
   const [epSquare, setEpSquare] = useState<Square | null>(null);
-  const [wTime, setWTime] = useState(TIMER_SECONDS);
-  const [bTime, setBTime] = useState(TIMER_SECONDS);
+  const [whiteTimeLeft, setWhiteTimeLeft] = useState(TIMER_SECONDS);
+  const [blackTimeLeft, setBlackTimeLeft] = useState(TIMER_SECONDS);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const escrowStatusRef = useRef(escrowStatus);
@@ -712,7 +712,7 @@ export default function GamePage() {
     if (mounted) loadBalance();
   }, [loadBalance, mounted]);
 
-  // Load game state on mount — works without wallet (uses fallback account for reads)
+  // Load game state on mount
   useEffect(() => {
     if (!mounted || !escrowId) return;
     loadGameState();
@@ -876,13 +876,124 @@ export default function GamePage() {
     }
   };
 
-  // Clock
+  // Get the last committed move
+  const logLastCommittedMove = async (gameId: bigint | null) => {
+    if (!gameId) return;
+
+    try {
+      const gameData = await simRead(
+        GAME_CONTRACT_ID,
+        "get_game",
+        [nativeToScVal(gameId, { type: "u64" })],
+        connectedAddress || undefined
+      );
+
+      const moves = gameData?.moves || [];
+      if (moves.length === 0) {
+        console.log("No moves committed yet on-chain");
+        return;
+      }
+
+      const lastMove = moves[moves.length - 1];
+
+      const parsed = {
+        san:
+          typeof lastMove.san === "string"
+            ? lastMove.san
+            : Array.isArray(lastMove.san)
+            ? String(lastMove.san[0] || "")
+            : Object.values(lastMove.san || {})[0] || "",
+
+        fen_after:
+          typeof lastMove.fen_after === "string"
+            ? lastMove.fen_after
+            : Array.isArray(lastMove.fen_after)
+            ? String(lastMove.fen_after[0] || "")
+            : Object.values(lastMove.fen_after || {})[0] || "",
+
+        player: lastMove.player || "",
+        move_number: lastMove.move_number || moves.length,
+        committed_at: lastMove.committed_at || null,
+      };
+
+      console.log(
+        `✅ Last committed move on-chain (#${parsed.move_number}):`,
+        parsed
+      );
+
+      if (parsed.san) {
+        let timeStr = "unknown time";
+
+        if (parsed.committed_at) {
+          // Convert Soroban u64 timestamp (seconds since Unix epoch) to readable date
+          const date = new Date(Number(parsed.committed_at) * 1000);
+          timeStr = date.toLocaleString();
+        }
+
+        console.log(
+          `Last on-chain move: ${parsed.san} by ${formatAddress(
+            parsed.player
+          )} at ${timeStr}`
+        );
+      }
+
+      return parsed;
+    } catch (err) {
+      console.error("Failed to fetch last committed move:", err);
+    }
+  };
+
+  // Calculate accurate remaining time based on last committed move
+  useEffect(() => {
+    if (escrowStatus !== "Active" || !gameContractId) return;
+
+    const calculateTimeLeft = async () => {
+      const lastMove = await logLastCommittedMove(gameContractId);
+
+      if (!lastMove || !lastMove.committed_at) {
+        setWhiteTimeLeft(TIMER_SECONDS);
+        setBlackTimeLeft(TIMER_SECONDS);
+        return;
+      }
+
+      const lastCommittedSeconds = Number(lastMove.committed_at);
+      const nowSeconds = Math.floor(Date.now() / 1000);
+
+      const elapsedSinceLastMove = nowSeconds - lastCommittedSeconds;
+
+      const isWhiteTurn = lastMove.move_number % 2 === 1;
+
+      let whiteRemaining = TIMER_SECONDS;
+      let blackRemaining = TIMER_SECONDS;
+
+      if (isWhiteTurn) {
+        whiteRemaining = Math.max(0, TIMER_SECONDS - elapsedSinceLastMove);
+      } else {
+        blackRemaining = Math.max(0, TIMER_SECONDS - elapsedSinceLastMove);
+      }
+
+      setWhiteTimeLeft(whiteRemaining);
+      setBlackTimeLeft(blackRemaining);
+    };
+
+    calculateTimeLeft();
+    const interval = setInterval(calculateTimeLeft, 10000);
+
+    return () => clearInterval(interval);
+  }, [gameContractId, escrowStatus]);
+
+  // Live countdown timer
   useEffect(() => {
     if (escrowStatus !== "Active") return;
+  
     timerRef.current = setInterval(() => {
-      if (currentTurn === "w") setWTime((t) => Math.max(0, t - 1));
-      else setBTime((t) => Math.max(0, t - 1));
+      if (currentTurn === "w") {
+        setWhiteTimeLeft((t) => Math.max(0, t - 1));
+      } else {
+        setBlackTimeLeft((t) => Math.max(0, t - 1));
+      }
     }, 1000);
+  
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
@@ -998,7 +1109,7 @@ export default function GamePage() {
   // ── Chess ─────────────────────────────────────────────────────────────────
   const handleSquareClick = async (row: number, col: number) => {
     if (escrowStatus !== "Active") return;
-    if (viewIndex !== null) return; // viewing history — must return to live first
+    if (viewIndex !== null) return; 
     if (currentTurn !== playerColor) return;
     if (selected) {
       const isValid = validMoves.some((m) => m.row === row && m.col === col);
@@ -1077,12 +1188,10 @@ export default function GamePage() {
         setInCheck(oppInCheck ? newTurn : null);
         const result = getGameResult(nb, newTurn, newCastling, newEp);
         if (result === "checkmate") {
-          handleGameOver(
-            currentTurn === "w" ? "WhiteWins" : "BlackWins",
-            newMoves
-          );
+          const outcome = currentTurn === "w" ? "WhiteWins" : "BlackWins";
+          await handleGameOver(outcome, newMoves);   
         } else if (result === "stalemate") {
-          handleGameOver("Draw", newMoves);
+          await handleGameOver("Draw", newMoves);
         }
 
         // Commit onchain
@@ -1102,17 +1211,17 @@ export default function GamePage() {
             console.error("No gameContractId - move only local");
             return;
           }
-        
-          const previousBoard = [...board.map(row => [...row])];   
+
+          const previousBoard = [...board.map((row) => [...row])];
           const previousMoveHistory = [...moveHistory];
           const previousFenHistory = [...fenHistory];
           const previousTurn = currentTurn;
           const previousCastling = { ...castlingRights };
           const previousEp = epSquare;
           const previousInCheck = inCheck;
-        
+
           setMovePending(true);
-        
+
           try {
             const txResult = await sendTx(
               connectedAddress,
@@ -1128,18 +1237,21 @@ export default function GamePage() {
               (s) => {
                 if (s.type !== "pending") setMovePending(false);
                 if (s.type === "success") {
-                  setTxStatus({ type: "success", msg: "Move confirmed on-chain", hash: s.hash });
+                  setTxStatus({
+                    type: "success",
+                    msg: "Move confirmed on-chain",
+                    hash: s.hash,
+                  });
                 }
               }
             );
-        
+
             if (!txResult) {
               throw new Error("Transaction failed or was rejected");
             }
-        
           } catch (err: any) {
             console.error("❌ commit_move failed", err);
-        
+
             // REVERT all local state
             setBoard(previousBoard);
             setMoveHistory(previousMoveHistory);
@@ -1151,15 +1263,17 @@ export default function GamePage() {
             setLastMove(null);
             setSelected(null);
             setValidMoves([]);
-        
+
             // Show clear error to user
             setTxStatus({
               type: "error",
               msg: `Error executing Move "${san}"`,
             });
-        
+
             // Optional: alert for extra visibility
-            alert(`Move failed: ${err.message || "Contract rejected the move"}`);
+            alert(
+              `Move failed: ${err.message || "Contract rejected the move"}`
+            );
           }
         }
         return;
@@ -1386,10 +1500,13 @@ export default function GamePage() {
           "0 0 60px -15px rgba(0,0,0,0.9),0 0 30px -8px rgba(217,119,6,0.12)",
       }}
     >
-      <div className="absolute left-0 top-0 bottom-0 w-5 flex flex-col pointer-events-none z-10 "  style={{ 
-            lineHeight: 1,
-            transform: 'translateY(-16px)' 
-          }}>
+      <div
+        className="absolute left-0 top-0 bottom-0 w-5 flex flex-col pointer-events-none z-10 "
+        style={{
+          lineHeight: 1,
+          transform: "translateY(-16px)",
+        }}
+      >
         {Array.from({ length: 8 }, (_, i) => (
           <div key={i} className="flex-1 flex items-center justify-center">
             <span className="text-[9px] text-zinc-600">
@@ -1443,15 +1560,15 @@ export default function GamePage() {
                         ))}
                       {piece && (
                         <span
-                          className="text-4xl sm:text-3xl md:text-4xl lg:text-5xl select-none transition-transform group-hover:scale-110"
+                          className="text-3xl sm:text-3xl md:text-4xl lg:text-4xl select-none transition-transform group-hover:scale-110"
                           style={{
                             color: piece.color === "w" ? "#fff" : "#1a1a1a",
                             textShadow:
                               piece.color === "w"
-                                ? "0 4px 12px rgba(0,0,0,0.9), 0 2px 4px rgba(0,0,0,0.6)"
+                                ? "0 2px 5px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.1)"
                                 : "0 3px 8px rgba(255,255,255,0.25)",
                             lineHeight: 1,
-                            filter: "drop-shadow(0 4px 6px rgba(0,0,0,0))",
+                            filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.5))",
                           }}
                         >
                           {PIECE_UNICODE[piece.type][piece.color]}
@@ -1752,21 +1869,42 @@ export default function GamePage() {
             <span className="text-[10px] text-zinc-500 font-mono">
               Game #{params.id}
             </span>
-            {movePending && (
-              <div className="flex items-center gap-1.5 px-2 py-1 border border-amber-500/20 rounded-lg bg-amber-500/5">
-                <RotateCcw size={10} className="animate-spin text-amber-500" />
-                <span className="text-[9px] text-amber-500">
-                  Saving move...
-                </span>
-              </div>
-            )}
-            {inCheck && (
+            {/* Move Saving / Transaction Modal */}
+            <AnimatePresence>
+              {movePending && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md"
+                >
+                  <motion.div
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.95, opacity: 0 }}
+                    className="bg-zinc-900 border border-amber-500/30 rounded-3xl p-8 max-w-sm w-full mx-4 text-center"
+                  >
+                    <div className="flex justify-center mb-6">
+                      <div className="w-16 h-16 rounded-full border-4 border-amber-500/30 border-t-amber-500 animate-spin" />
+                    </div>
+
+                    <h3 className="text-xl font-bold text-white mb-2">
+                      Confirm Move
+                    </h3>
+                    <p className="text-zinc-400 text-sm mb-6">
+                      Please confirm the transaction in your wallet
+                    </p>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            {/* {inCheck && (
               <div className="flex items-center gap-1.5 px-2 py-1 border border-rose-500/40 rounded-lg bg-rose-500/10">
                 <span className="text-[9px] text-rose-400 font-bold uppercase tracking-wider">
                   ⚠ {inCheck === "w" ? "White" : "Black"} in Check
                 </span>
               </div>
-            )}
+            )} */}
           </div>
           <div className="flex items-center gap-3">
             {connectedAddress && (
@@ -1794,7 +1932,7 @@ export default function GamePage() {
             {(() => {
               const opActive =
                 currentTurn === opColor && escrowStatus === "Active";
-              const opTime = opColor === "w" ? wTime : bTime;
+              const opTime = opColor === "w" ? whiteTimeLeft : blackTimeLeft;
               const opCap = opColor === "w" ? capturedW : capturedB;
               const opAddr =
                 opColor === "w" ? escrowData?.white : escrowData?.black;
@@ -1897,7 +2035,8 @@ export default function GamePage() {
             {(() => {
               const myActive =
                 currentTurn === playerColor && escrowStatus === "Active";
-              const myTime = playerColor === "w" ? wTime : bTime;
+              const myTime =
+                playerColor === "w" ? whiteTimeLeft : blackTimeLeft;
               const myCap = playerColor === "w" ? capturedW : capturedB;
               return (
                 <div
@@ -2014,9 +2153,6 @@ export default function GamePage() {
             <div className="border border-zinc-800 rounded-2xl p-4 bg-zinc-900/20 flex-1">
               <h3 className="text-[9px] text-zinc-600 uppercase tracking-widest mb-3 flex items-center justify-between">
                 <span>Moves ({moveHistory.length})</span>
-                {moveHistory.length > 0 && (
-                  <span className="text-zinc-700">onchain ✓</span>
-                )}
               </h3>
               <div className="space-y-1 max-h-56 overflow-y-auto">
                 {moveHistory.length === 0 ? (
