@@ -52,7 +52,6 @@ const STATUS_MAP: Record<number, string> = {
   5: "Timeout",
 };
 
-
 function parseStatus(r: any): string {
   if (typeof r === "number") return STATUS_MAP[r] ?? String(r);
   if (Array.isArray(r)) return String(r[0]);
@@ -220,15 +219,23 @@ function getPseudoMovesRaw(board: Board, sq: Square): Square[] {
   if (!piece) return [];
   const moves: Square[] = [];
   const inB = (r: number, c: number) => r >= 0 && r < 8 && c >= 0 && c < 8;
-  const canL = (r: number, c: number) => inB(r, c) && board[r][c]?.color !== piece.color;
-  const isEn = (r: number, c: number) => inB(r, c) && board[r][c] !== null && board[r][c]?.color !== piece.color;
+  const canL = (r: number, c: number) =>
+    inB(r, c) && board[r][c]?.color !== piece.color;
+  const isEn = (r: number, c: number) =>
+    inB(r, c) && board[r][c] !== null && board[r][c]?.color !== piece.color;
   const slide = (drs: number[], dcs: number[]) => {
     for (let i = 0; i < drs.length; i++) {
-      let r = sq.row + drs[i], c = sq.col + dcs[i];
+      let r = sq.row + drs[i],
+        c = sq.col + dcs[i];
       while (inB(r, c)) {
         if (!board[r][c]) moves.push({ row: r, col: c });
-        else { if (board[r][c]?.color !== piece.color) moves.push({ row: r, col: c }); break; }
-        r += drs[i]; c += dcs[i];
+        else {
+          if (board[r][c]?.color !== piece.color)
+            moves.push({ row: r, col: c });
+          break;
+        }
+        r += drs[i];
+        c += dcs[i];
       }
     }
   };
@@ -243,16 +250,42 @@ function getPseudoMovesRaw(board: Board, sq: Square): Square[] {
       break;
     }
     case "N":
-      [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc]) => {
-        if (canL(sq.row+dr!,sq.col+dc!)) moves.push({row:sq.row+dr!,col:sq.col+dc!});
+      [
+        [-2, -1],
+        [-2, 1],
+        [-1, -2],
+        [-1, 2],
+        [1, -2],
+        [1, 2],
+        [2, -1],
+        [2, 1],
+      ].forEach(([dr, dc]) => {
+        if (canL(sq.row + dr!, sq.col + dc!))
+          moves.push({ row: sq.row + dr!, col: sq.col + dc! });
       });
       break;
-    case "B": slide([-1,-1,1,1],[-1,1,-1,1]); break;
-    case "R": slide([-1,1,0,0],[0,0,-1,1]); break;
-    case "Q": slide([-1,1,0,0,-1,-1,1,1],[0,0,-1,1,-1,1,-1,1]); break;
+    case "B":
+      slide([-1, -1, 1, 1], [-1, 1, -1, 1]);
+      break;
+    case "R":
+      slide([-1, 1, 0, 0], [0, 0, -1, 1]);
+      break;
+    case "Q":
+      slide([-1, 1, 0, 0, -1, -1, 1, 1], [0, 0, -1, 1, -1, 1, -1, 1]);
+      break;
     case "K":
-      [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]].forEach(([dr,dc]) => {
-        if (canL(sq.row+dr!,sq.col+dc!)) moves.push({row:sq.row+dr!,col:sq.col+dc!});
+      [
+        [-1, -1],
+        [-1, 0],
+        [-1, 1],
+        [0, -1],
+        [0, 1],
+        [1, -1],
+        [1, 0],
+        [1, 1],
+      ].forEach(([dr, dc]) => {
+        if (canL(sq.row + dr!, sq.col + dc!))
+          moves.push({ row: sq.row + dr!, col: sq.col + dc! });
       });
       break;
   }
@@ -270,72 +303,137 @@ function getPseudoMoves(
   if (!piece) return [];
   const moves: Square[] = [];
   const inB = (r: number, c: number) => r >= 0 && r < 8 && c >= 0 && c < 8;
-  const canL = (r: number, c: number) => inB(r, c) && board[r][c]?.color !== piece.color;
-  const isEn = (r: number, c: number) => inB(r, c) && board[r][c] !== null && board[r][c]?.color !== piece.color;
+  const canL = (r: number, c: number) =>
+    inB(r, c) && board[r][c]?.color !== piece.color;
+  const isEn = (r: number, c: number) =>
+    inB(r, c) && board[r][c] !== null && board[r][c]?.color !== piece.color;
   const slide = (drs: number[], dcs: number[]) => {
     for (let i = 0; i < drs.length; i++) {
-      let r = sq.row + drs[i], c = sq.col + dcs[i];
+      let r = sq.row + drs[i],
+        c = sq.col + dcs[i];
       while (inB(r, c)) {
         if (!board[r][c]) moves.push({ row: r, col: c });
-        else { if (board[r][c]?.color !== piece.color) moves.push({ row: r, col: c }); break; }
-        r += drs[i]; c += dcs[i];
+        else {
+          if (board[r][c]?.color !== piece.color)
+            moves.push({ row: r, col: c });
+          break;
+        }
+        r += drs[i];
+        c += dcs[i];
       }
     }
   };
   switch (piece.type) {
     case "P": {
-      const d = piece.color === "w" ? -1 : 1, sr = piece.color === "w" ? 6 : 1;
+      const d = piece.color === "w" ? -1 : 1,
+        sr = piece.color === "w" ? 6 : 1;
       if (inB(sq.row + d, sq.col) && !board[sq.row + d][sq.col])
         moves.push({ row: sq.row + d, col: sq.col });
-      if (sq.row === sr && !board[sq.row + d][sq.col] && !board[sq.row + 2*d][sq.col])
-        moves.push({ row: sq.row + 2*d, col: sq.col });
+      if (
+        sq.row === sr &&
+        !board[sq.row + d][sq.col] &&
+        !board[sq.row + 2 * d][sq.col]
+      )
+        moves.push({ row: sq.row + 2 * d, col: sq.col });
       [-1, 1].forEach((dc) => {
         if (isEn(sq.row + d, sq.col + dc))
           moves.push({ row: sq.row + d, col: sq.col + dc });
-        if (epSquare && epSquare.row === sq.row + d && epSquare.col === sq.col + dc)
+        if (
+          epSquare &&
+          epSquare.row === sq.row + d &&
+          epSquare.col === sq.col + dc
+        )
           moves.push({ row: sq.row + d, col: sq.col + dc });
       });
       break;
     }
     case "N":
-      [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc]) => {
-        if (canL(sq.row+dr!,sq.col+dc!)) moves.push({row:sq.row+dr!,col:sq.col+dc!});
+      [
+        [-2, -1],
+        [-2, 1],
+        [-1, -2],
+        [-1, 2],
+        [1, -2],
+        [1, 2],
+        [2, -1],
+        [2, 1],
+      ].forEach(([dr, dc]) => {
+        if (canL(sq.row + dr!, sq.col + dc!))
+          moves.push({ row: sq.row + dr!, col: sq.col + dc! });
       });
       break;
-      case "B": slide([-1,-1,1,1],[-1,1,-1,1]); break;
-    case "R": slide([-1,1,0,0],[0,0,-1,1]); break;
-    case "Q": slide([-1,1,0,0,-1,-1,1,1],[0,0,-1,1,-1,1,-1,1]); break;
+    case "B":
+      slide([-1, -1, 1, 1], [-1, 1, -1, 1]);
+      break;
+    case "R":
+      slide([-1, 1, 0, 0], [0, 0, -1, 1]);
+      break;
+    case "Q":
+      slide([-1, 1, 0, 0, -1, -1, 1, 1], [0, 0, -1, 1, -1, 1, -1, 1]);
+      break;
     case "K": {
-      [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]].forEach(([dr,dc]) => {
-        if (canL(sq.row+dr!,sq.col+dc!)) moves.push({row:sq.row+dr!,col:sq.col+dc!});
+      [
+        [-1, -1],
+        [-1, 0],
+        [-1, 1],
+        [0, -1],
+        [0, 1],
+        [1, -1],
+        [1, 0],
+        [1, 1],
+      ].forEach(([dr, dc]) => {
+        if (canL(sq.row + dr!, sq.col + dc!))
+          moves.push({ row: sq.row + dr!, col: sq.col + dc! });
       });
       if (castling && piece.color === "w" && sq.row === 7 && sq.col === 4) {
-        if (castling.wK && !board[7][5] && !board[7][6] &&
-            board[7][7]?.type === "R" && board[7][7]?.color === "w" &&
-            !isInCheck(board, "w") &&
-            !squareAttackedBy(board, {row:7,col:5}, "b") &&
-            !squareAttackedBy(board, {row:7,col:6}, "b"))
-          moves.push({row:7, col:6});
-        if (castling.wQ && !board[7][3] && !board[7][2] && !board[7][1] &&
-            board[7][0]?.type === "R" && board[7][0]?.color === "w" &&
-            !isInCheck(board, "w") &&
-            !squareAttackedBy(board, {row:7,col:3}, "b") &&
-            !squareAttackedBy(board, {row:7,col:2}, "b"))
-          moves.push({row:7, col:2});
+        if (
+          castling.wK &&
+          !board[7][5] &&
+          !board[7][6] &&
+          board[7][7]?.type === "R" &&
+          board[7][7]?.color === "w" &&
+          !isInCheck(board, "w") &&
+          !squareAttackedBy(board, { row: 7, col: 5 }, "b") &&
+          !squareAttackedBy(board, { row: 7, col: 6 }, "b")
+        )
+          moves.push({ row: 7, col: 6 });
+        if (
+          castling.wQ &&
+          !board[7][3] &&
+          !board[7][2] &&
+          !board[7][1] &&
+          board[7][0]?.type === "R" &&
+          board[7][0]?.color === "w" &&
+          !isInCheck(board, "w") &&
+          !squareAttackedBy(board, { row: 7, col: 3 }, "b") &&
+          !squareAttackedBy(board, { row: 7, col: 2 }, "b")
+        )
+          moves.push({ row: 7, col: 2 });
       }
       if (castling && piece.color === "b" && sq.row === 0 && sq.col === 4) {
-        if (castling.bK && !board[0][5] && !board[0][6] &&
-            board[0][7]?.type === "R" && board[0][7]?.color === "b" &&
-            !isInCheck(board, "b") &&
-            !squareAttackedBy(board, {row:0,col:5}, "w") &&
-            !squareAttackedBy(board, {row:0,col:6}, "w"))
-          moves.push({row:0, col:6});
-        if (castling.bQ && !board[0][3] && !board[0][2] && !board[0][1] &&
-            board[0][0]?.type === "R" && board[0][0]?.color === "b" &&
-            !isInCheck(board, "b") &&
-            !squareAttackedBy(board, {row:0,col:3}, "w") &&
-            !squareAttackedBy(board, {row:0,col:2}, "w"))
-          moves.push({row:0, col:2});
+        if (
+          castling.bK &&
+          !board[0][5] &&
+          !board[0][6] &&
+          board[0][7]?.type === "R" &&
+          board[0][7]?.color === "b" &&
+          !isInCheck(board, "b") &&
+          !squareAttackedBy(board, { row: 0, col: 5 }, "w") &&
+          !squareAttackedBy(board, { row: 0, col: 6 }, "w")
+        )
+          moves.push({ row: 0, col: 6 });
+        if (
+          castling.bQ &&
+          !board[0][3] &&
+          !board[0][2] &&
+          !board[0][1] &&
+          board[0][0]?.type === "R" &&
+          board[0][0]?.color === "b" &&
+          !isInCheck(board, "b") &&
+          !squareAttackedBy(board, { row: 0, col: 3 }, "w") &&
+          !squareAttackedBy(board, { row: 0, col: 2 }, "w")
+        )
+          moves.push({ row: 0, col: 2 });
       }
       break;
     }
@@ -426,8 +524,11 @@ function diffBoards(
 
 // Get fully legal moves — filters out any that leave own king in check
 function getLegalMoves(
-  board: Board, sq: Square, turn: Color,
-  castling?: CastlingRights, epSquare?: Square | null
+  board: Board,
+  sq: Square,
+  turn: Color,
+  castling?: CastlingRights,
+  epSquare?: Square | null
 ): Square[] {
   const piece = board[sq.row][sq.col];
   if (!piece || piece.color !== turn) return [];
@@ -934,11 +1035,12 @@ export default function GamePage() {
           san = col > selected.col ? "O-O" : "O-O-O";
         } else if (
           mp.type === "P" &&
-          !board[row][col] &&           // destination is empty
-          epSquare?.row === row && epSquare?.col === col  
+          !board[row][col] && // destination is empty
+          epSquare?.row === row &&
+          epSquare?.col === col
         ) {
           const f = "abcdefgh";
-          san = `${f[selected.col]}x${f[col]}${8 - row}`; 
+          san = `${f[selected.col]}x${f[col]}${8 - row}`;
         } else {
           san = toSAN(mp, selected, dest, cap);
         }
@@ -984,6 +1086,16 @@ export default function GamePage() {
         }
 
         // Commit onchain
+        console.log("🔥 About to commit_move", {
+          gameContractId,
+          escrowId,
+          gcId: gameContractId ?? escrowId,
+          san,
+          fen,
+          connected: !!connectedAddress,
+          hasKit: !!walletsKit,
+          isKingMove: board[selected.row][selected.col]?.type === "K",
+        });
         if (connectedAddress && walletsKit) {
           const gcId = gameContractId ?? escrowId;
           if (gcId) {
@@ -1000,10 +1112,18 @@ export default function GamePage() {
                 nativeToScVal(fen, { type: "string" }),
               ],
               (s) => {
+                console.log("commit_move status →", s);
                 if (s.type !== "pending") setMovePending(false);
               }
-            ).catch(() => setMovePending(false));
+            ).catch((err) => {
+              console.error("❌ commit_move sendTx failed", err);
+              setMovePending(false);
+            });
+          } else {
+            console.error("❌ No gcId for commit_move!");
           }
+        } else {
+          console.warn("⚠️ Not connected or no wallet kit - move only local");
         }
         return;
       }
@@ -1077,31 +1197,60 @@ export default function GamePage() {
     outcome: "WhiteWins" | "BlackWins" | "Draw",
     moves: string[]
   ) => {
-    setWinner(
-      outcome === "WhiteWins" ? "w" : outcome === "BlackWins" ? "b" : "draw"
-    );
-    setEscrowStatus("Finished");
-    if (!connectedAddress || !escrowId) return;
-    await escrowTx("finish_game", [
-      nativeToScVal(escrowId, { type: "u64" }),
-      new Address(connectedAddress).toScVal(),
-      xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(outcome)]),
-      nativeToScVal(moves.join(" "), { type: "string" }),
-    ]);
-    if (gameContractId && walletsKit) {
-      sendTx(
-        connectedAddress,
-        walletsKit,
-        GAME_CONTRACT_ID,
-        "complete_game",
-        [
-          nativeToScVal(gameContractId, { type: "u64" }),
-          new Address(connectedAddress).toScVal(),
-          xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(outcome)]),
-          nativeToScVal(moves.join(" "), { type: "string" }),
-        ],
-        () => {}
-      ).catch(() => {});
+    if (!connectedAddress || !escrowId || !walletsKit) {
+      setWinner(
+        outcome === "WhiteWins" ? "w" : outcome === "BlackWins" ? "b" : "draw"
+      );
+      return;
+    }
+
+    setTxStatus({
+      type: "pending",
+      msg: outcome === "Draw" ? "Accepting draw..." : "Finishing game...",
+    });
+
+    try {
+      const txResult = await escrowTx("finish_game", [
+        nativeToScVal(escrowId, { type: "u64" }),
+        new Address(connectedAddress).toScVal(),
+        xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(outcome)]),
+        nativeToScVal(moves.join(" "), { type: "string" }),
+      ]);
+      if (gameContractId) {
+        sendTx(
+          connectedAddress,
+          walletsKit,
+          GAME_CONTRACT_ID,
+          "complete_game",
+          [
+            nativeToScVal(gameContractId, { type: "u64" }),
+            new Address(connectedAddress).toScVal(),
+            xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(outcome)]),
+            nativeToScVal(moves.join(" "), { type: "string" }),
+          ],
+          () => {}
+        ).catch(console.warn);
+      }
+      if (txResult) {
+        const winnerColor =
+          outcome === "WhiteWins"
+            ? "w"
+            : outcome === "BlackWins"
+            ? "b"
+            : "draw";
+
+        setWinner(winnerColor);
+        setEscrowStatus("Finished");
+        await loadGameState();
+      } else {
+        setTxStatus({ type: "error", msg: "Transaction failed or rejected" });
+      }
+    } catch (err: any) {
+      console.error("handleGameOver error:", err);
+      setTxStatus({
+        type: "error",
+        msg: err.message || "Failed to finish game",
+      });
     }
   };
 
@@ -1200,7 +1349,10 @@ export default function GamePage() {
           "0 0 60px -15px rgba(0,0,0,0.9),0 0 30px -8px rgba(217,119,6,0.12)",
       }}
     >
-      <div className="absolute left-0 top-0 bottom-0 w-5 flex flex-col pointer-events-none z-10">
+      <div className="absolute left-0 top-0 bottom-0 w-5 flex flex-col pointer-events-none z-10 "  style={{ 
+            lineHeight: 1,
+            transform: 'translateY(-16px)' 
+          }}>
         {Array.from({ length: 8 }, (_, i) => (
           <div key={i} className="flex-1 flex items-center justify-center">
             <span className="text-[9px] text-zinc-600">
@@ -1254,14 +1406,15 @@ export default function GamePage() {
                         ))}
                       {piece && (
                         <span
-                          className="text-xl sm:text-2xl md:text-3xl select-none transition-transform group-hover:scale-110"
+                          className="text-4xl sm:text-3xl md:text-4xl lg:text-5xl select-none transition-transform group-hover:scale-110"
                           style={{
                             color: piece.color === "w" ? "#fff" : "#1a1a1a",
                             textShadow:
                               piece.color === "w"
-                                ? "0 1px 3px rgba(0,0,0,0.7)"
-                                : "0 1px 2px rgba(255,255,255,0.2)",
+                                ? "0 4px 12px rgba(0,0,0,0.9), 0 2px 4px rgba(0,0,0,0.6)"
+                                : "0 3px 8px rgba(255,255,255,0.25)",
                             lineHeight: 1,
+                            filter: "drop-shadow(0 4px 6px rgba(0,0,0,0))",
                           }}
                         >
                           {PIECE_UNICODE[piece.type][piece.color]}
