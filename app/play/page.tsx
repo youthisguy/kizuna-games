@@ -26,6 +26,8 @@ import {
   List,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { useKingFallAuth } from "../hooks/Usekingfallauth";
+import UsernameModal from "../components/UsernameModal";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const ESCROW_CONTRACT_ID =
@@ -165,6 +167,13 @@ export default function PlayLobby() {
   const [allGamesLoading, setAllGamesLoading] = useState(false);
   const [showAllGames, setShowAllGames] = useState(false);
   const [totalStaked, setTotalStaked] = useState<string>("—");
+
+  const {
+    user: kfUser,
+    showUsernameModal,
+    registerUser,
+    isLoading: authLoading,
+  } = useKingFallAuth();
 
   useEffect(() => {
     setMounted(true);
@@ -517,16 +526,30 @@ export default function PlayLobby() {
         {/* Header */}
         <header className="flex items-center justify-between mb-8">
           {connectedAddress ? (
-            <div className="flex items-center gap-2 px-3 py-2 border border-zinc-800 rounded-xl bg-zinc-900/40 backdrop-blur">
-              <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-              <span className="text-[10px] text-zinc-400">
-                {formatAddress(connectedAddress)}
-              </span>
-              <span className="text-[10px] text-zinc-600">·</span>
-              <span className="text-[10px] text-amber-400 font-bold">
-                {xlmBalance} XLM
-              </span>
-            </div>
+        <div className="flex items-center border border-zinc-800 rounded-[14px] bg-zinc-900/60 backdrop-blur overflow-hidden">
+        <div className="flex items-center gap-2 px-3 py-1.5 border-r border-zinc-800">
+          <div className="w-[26px] h-[26px] rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
+            <Crown size={13} className="text-amber-400" />
+          </div>
+          <div className="flex flex-col gap-0">
+            <span className="text-[11px] font-semibold text-zinc-200 leading-tight">
+              {kfUser?.username}
+            </span>
+            <span className="text-[10px] text-zinc-500 font-mono tracking-wide leading-tight">
+              {formatAddress(connectedAddress)}
+            </span>
+          </div>
+        </div>
+      
+        <div className="flex items-center gap-1.5 px-3 py-1.5">
+          <span className="text-[11px] font-bold text-amber-400 tracking-wide">
+            {xlmBalance}
+          </span>
+          <span className="text-[12px] font-semibold text-amber-900/80 tracking-widest">
+            XLM
+          </span>
+        </div>
+      </div>
           ) : (
             <div />
           )}
@@ -567,7 +590,7 @@ export default function PlayLobby() {
                   ♚
                 </div>
                 <h2 className="text-3xl font-bold text-white tracking-wider">
-                  Play. Stake. <span className="text-amber-400">Conquer.</span>
+                  Stake. Play. <span className="text-amber-400">Conquer.</span>
                 </h2>
                 <p className="text-zinc-500 text-sm leading-relaxed max-w-sm mx-auto">
                   P2P chess with XLM on the line. Stakes locked in Soroban
@@ -634,7 +657,7 @@ export default function PlayLobby() {
                       {loading ? (
                         <>
                           <RotateCcw size={16} className="animate-spin" />{" "}
-                          Processing...
+                          Processing
                         </>
                       ) : (
                         <>
@@ -1022,9 +1045,7 @@ export default function PlayLobby() {
                         size={12}
                         className="animate-spin text-zinc-600"
                       />
-                      <span className="text-[10px] text-zinc-600">
-                        Loading...
-                      </span>
+                      <span className="text-[10px] text-zinc-600">Loading</span>
                     </div>
                   ) : myGames.length === 0 ? (
                     <p className="text-[10px] text-zinc-600 text-center py-4">
@@ -1076,9 +1097,7 @@ export default function PlayLobby() {
                         size={12}
                         className="animate-spin text-zinc-600"
                       />
-                      <span className="text-[10px] text-zinc-600">
-                        Loading...
-                      </span>
+                      <span className="text-[10px] text-zinc-600">Loading</span>
                     </div>
                   ) : activeGames.length === 0 ? (
                     <p className="text-[10px] text-zinc-600 text-center py-4">
@@ -1131,9 +1150,7 @@ export default function PlayLobby() {
                         size={12}
                         className="animate-spin text-zinc-600"
                       />
-                      <span className="text-[10px] text-zinc-600">
-                        Loading...
-                      </span>
+                      <span className="text-[10px] text-zinc-600">Loading</span>
                     </div>
                   ) : allGames.length === 0 ? (
                     <p className="text-[10px] text-zinc-600 text-center py-4">
@@ -1214,7 +1231,7 @@ export default function PlayLobby() {
                             className="animate-spin text-zinc-600"
                           />
                           <span className="text-[10px] text-zinc-600">
-                            Loading...
+                            Loading
                           </span>
                         </div>
                       ) : myGames.length === 0 ? (
@@ -1268,9 +1285,7 @@ export default function PlayLobby() {
                         size={12}
                         className="animate-spin text-zinc-600"
                       />
-                      <span className="text-[10px] text-zinc-600">
-                        Loading...
-                      </span>
+                      <span className="text-[10px] text-zinc-600">Loading</span>
                     </div>
                   ) : activeGames.length === 0 ? (
                     <p className="text-[10px] text-zinc-600 text-center py-4">
@@ -1323,9 +1338,7 @@ export default function PlayLobby() {
                         size={12}
                         className="animate-spin text-zinc-600"
                       />
-                      <span className="text-[10px] text-zinc-600">
-                        Loading...
-                      </span>
+                      <span className="text-[10px] text-zinc-600">Loading</span>
                     </div>
                   ) : allGames.length === 0 ? (
                     <p className="text-[10px] text-zinc-600 text-center py-4">
@@ -1368,6 +1381,7 @@ export default function PlayLobby() {
           </div>
         </div>
       </div>
+      <UsernameModal open={showUsernameModal} onSubmit={registerUser as any} />
     </div>
   );
 }

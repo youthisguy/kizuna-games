@@ -1357,7 +1357,7 @@ export default function GamePage() {
 
     setTxStatus({
       type: "pending",
-      msg: outcome === "Draw" ? "Accepting draw..." : "Finishing game...",
+      msg: outcome === "Draw" ? "Accepting draw " : "Finishing game ",
     });
 
     try {
@@ -1715,7 +1715,7 @@ export default function GamePage() {
                       {joinLoading ? (
                         <>
                           <RotateCcw size={14} className="animate-spin" />{" "}
-                          Joining...
+                          Joining 
                         </>
                       ) : (
                         <>Stake & Join as Black</>
