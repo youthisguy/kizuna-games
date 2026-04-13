@@ -128,13 +128,14 @@ export default function MobileNav({ navItems }: MobileNavProps) {
               </Link>
             );
           })}
-        </div>
-
-        {/* ── Profile + Wallet at bottom ── */}
+                {/* ── Profile + Wallet at bottom ── */}
         <div className="px-4 py-5 border-t border-zinc-800/50 shrink-0 space-y-3">
           <SidebarProfile />
           <WalletConnection />
         </div>
+        </div>
+
+  
       </nav>
     </>
   );

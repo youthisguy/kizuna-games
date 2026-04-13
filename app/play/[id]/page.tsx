@@ -28,6 +28,7 @@ import {
   Zap,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useKingFallAuth } from "@/app/hooks/Usekingfallauth"; 
 
 const ESCROW_CONTRACT_ID =
   "CCSDLJLDIJSAOKFLX2QWCOVLENA4FFN2EMSGJRFKTIBYY4UUA2HKDGBN";
@@ -625,6 +626,8 @@ async function sendTx(
 
 export default function GamePage() {
   const { address: connectedAddress, walletsKit } = useWallet();
+  const { recordGameResult } = useKingFallAuth();
+
   const params = useParams();
   const router = useRouter();
   const rawId = Array.isArray(params?.id) ? params.id[0] : params?.id;
@@ -1354,12 +1357,12 @@ export default function GamePage() {
       );
       return;
     }
-
+  
     setTxStatus({
       type: "pending",
-      msg: outcome === "Draw" ? "Accepting draw " : "Finishing game ",
+      msg: outcome === "Draw" ? "Accepting draw..." : "Finishing game...",
     });
-
+  
     try {
       const txResult = await escrowTx("finish_game", [
         nativeToScVal(escrowId, { type: "u64" }),
@@ -1367,6 +1370,7 @@ export default function GamePage() {
         xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(outcome)]),
         nativeToScVal(moves.join(" "), { type: "string" }),
       ]);
+  
       if (gameContractId) {
         sendTx(
           connectedAddress,
@@ -1382,16 +1386,40 @@ export default function GamePage() {
           () => {}
         ).catch(console.warn);
       }
+  
       if (txResult) {
         const winnerColor =
-          outcome === "WhiteWins"
-            ? "w"
-            : outcome === "BlackWins"
-            ? "b"
-            : "draw";
-
+          outcome === "WhiteWins" ? "w" : outcome === "BlackWins" ? "b" : "draw";
+  
         setWinner(winnerColor);
         setEscrowStatus("Finished");
+  
+        // ── Record result to backend ──────────────────────────────────────────
+        if (escrowData) {
+          const txHash =
+            typeof txResult === "object" && (txResult as any).hash
+              ? (txResult as any).hash
+              : undefined;
+  
+          recordGameResult({
+            escrow_game_id:   Number(escrowId),
+            game_contract_id: gameContractId ? Number(gameContractId) : undefined,
+            white_address:    escrowData.white,
+            black_address:    escrowData.black,
+            outcome,
+            stake_each:       Number(escrowData.stake),
+            tx_hash_finish:   txHash,
+            move_count:       moves.length,
+            pgn:              moves.join(" "),
+            termination:
+              outcome === "Draw" ? "Draw" :
+              getGameResult(board, outcome === "WhiteWins" ? "b" : "w") === "checkmate"
+                ? "Checkmate"
+                : "Resignation",
+            network: "testnet",
+          }).catch((e) => console.warn("[recordGameResult]", e));
+        }
+ 
         await loadGameState();
       } else {
         setTxStatus({ type: "error", msg: "Transaction failed or rejected" });
