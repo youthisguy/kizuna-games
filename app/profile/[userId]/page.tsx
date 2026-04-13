@@ -9,6 +9,7 @@ import {
   Star, Target, Flame, ChevronRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { div } from "framer-motion/client";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -161,43 +162,53 @@ export default function ProfilePage() {
           <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
             style={{ backgroundImage: "repeating-linear-gradient(45deg, #d97706 0, #d97706 1px, transparent 0, transparent 50%)", backgroundSize: "20px 20px" }} />
 
-          <div className="relative flex items-start justify-between gap-4">
-            <div className="flex items-center gap-4">
-              {/* Avatar */}
-              <div className="w-16 h-16 rounded-2xl border border-amber-500/30 bg-amber-500/10 flex items-center justify-center text-3xl shrink-0"
-                style={{ boxShadow: "0 0 30px -8px rgba(217,119,6,0.4)" }}>
-                ♔
-              </div>
-              <div>
-                <h1 className="text-2xl font-black text-white tracking-wider">{user.username}</h1>
-                <p className="text-[10px] text-zinc-600 font-mono mt-0.5">{formatAddress(user.wallet_address)}</p>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/25 text-amber-400 font-black uppercase tracking-wider">
-                    ELO {user.elo_rating}
-                  </span>
-                  {user.peak_elo > user.elo_rating && (
-                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-500 uppercase tracking-wider">
-                      Peak {user.peak_elo}
-                    </span>
-                  )}
-                  {user.win_streak >= 3 && (
-                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-orange-500/15 border border-orange-500/25 text-orange-400 font-black uppercase tracking-wider">
-                      🔥 {user.win_streak} streak
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
+<div className="relative flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+  
+  <div className="flex items-center gap-3">
+    {/* Avatar — smaller on mobile */}
+    <div
+      className="w-12 h-12 px-5 py-3 sm:w-16 sm:h-16 rounded-2xl border border-amber-500/30 bg-amber-500/10 flex items-center justify-center text-2xl sm:text-3xl shrink-0"
+      style={{ boxShadow: "0 0 30px -8px rgba(217,119,6,0.4)" }}
+    >
+      ♔
+    </div>
+    <div>
+      <h1 className="text-xl sm:text-2xl font-black text-white tracking-wider">{user.username}</h1>
+      <p className="text-[10px] text-zinc-600 font-mono mt-0.5">{formatAddress(user.wallet_address)}</p>
+      <div className="flex items-center flex-wrap gap-2 mt-2">
+        <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/25 text-amber-400 font-black uppercase tracking-wider">
+          ELO {user.elo_rating}
+        </span>
+        {user.peak_elo > user.elo_rating && (
+          <span className="text-[9px] px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-500 uppercase tracking-wider">
+            Peak {user.peak_elo}
+          </span>
+        )}
+        {user.win_streak >= 3 && (
+          <span className="text-[9px] px-2 py-0.5 rounded-full bg-orange-500/15 border border-orange-500/25 text-orange-400 font-black uppercase tracking-wider">
+            🔥 {user.win_streak} streak
+          </span>
+        )}
+      </div>
+    </div>
+  </div>
 
-            {/* Net profit badge */}
-            <div className={`shrink-0 text-right px-4 py-3 rounded-2xl border ${netPositive ? "border-emerald-500/25 bg-emerald-500/8" : "border-rose-500/25 bg-rose-500/8"}`}>
-              <p className="text-[9px] uppercase tracking-widest mb-1" style={{ color: netPositive ? "#6ee7b7" : "#fca5a5" }}>Net P&L</p>
-              <p className={`text-xl font-black tabular-nums ${netPositive ? "text-emerald-400" : "text-rose-400"}`}>
-                {netPositive ? "+" : "-"}{netXlm}
-              </p>
-              <p className="text-[9px] text-zinc-600 mt-0.5">XLM</p>
-            </div>
-          </div>
+  {/* Net profit badge — full width row on mobile, floated right on sm+ */}
+  <div className={`flex sm:flex-col items-center sm:items-end justify-between sm:justify-start px-4 py-2.5 sm:py-3 rounded-2xl border ${
+    netPositive ? "border-emerald-500/25 bg-emerald-500/8" : "border-rose-500/25 bg-rose-500/8"
+  }`}>
+    <p className="text-[9px] uppercase tracking-widest sm:mb-1" style={{ color: netPositive ? "#6ee7b7" : "#fca5a5" }}>
+      Net P&L
+    </p>
+    <div className="flex items-baseline gap-1">
+      <p className={`text-lg sm:text-xl font-black tabular-nums ${netPositive ? "text-emerald-400" : "text-rose-400"}`}>
+        {netPositive ? "+" : "-"}{netXlm}
+      </p>
+      <p className="text-[9px] text-zinc-600">XLM</p>
+    </div>
+  </div>
+
+</div>
 
           {/* ELO bar */}
           <div className="mt-5 space-y-1">
