@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link, { LinkProps } from "next/link";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Crown, X, Menu } from "lucide-react";
+import { X, Menu } from "lucide-react";
 import WalletConnection from "./WalletConnection";
+import SidebarProfile from "./SidebarProfile";
 import Image from "next/image";
 
 interface NavItem {
@@ -21,21 +22,15 @@ export default function MobileNav({ navItems }: MobileNavProps) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
-  // Close drawer on route change
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+  useEffect(() => { setOpen(false); }, [pathname]);
 
-  // Lock body scroll when drawer is open
   useEffect(() => {
     if (open) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "";
     }
-    return () => {
-      document.body.style.overflow = "";
-    };
+    return () => { document.body.style.overflow = ""; };
   }, [open]);
 
   return (
@@ -51,21 +46,10 @@ export default function MobileNav({ navItems }: MobileNavProps) {
         </button>
 
         <Link href="/" className="flex items-center gap-2.5">
-          <Image
-            src="/KingFall_logo.png"
-            alt="KingFall Logo"
-            width={28}
-            height={28}
-            className="object-contain"
-          />
-
+          <Image src="/KingFall_logo.png" alt="KingFall Logo" width={28} height={28} className="object-contain" />
           <h1 className="text-lg uppercase tracking-[0.2em]">
-            <span className="kingfall-font">
-              King
-            </span>
-            <span className="kingfall-font">
-              Fall
-            </span>
+            <span className="kingfall-font">King</span>
+            <span className="kingfall-font">Fall</span>
           </h1>
         </Link>
 
@@ -78,9 +62,7 @@ export default function MobileNav({ navItems }: MobileNavProps) {
       <div
         onClick={() => setOpen(false)}
         className={`md:hidden fixed inset-0 z-60 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${
-          open
-            ? "opacity-100 pointer-events-auto"
-            : "opacity-0 pointer-events-none"
+          open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
         aria-hidden="true"
       />
@@ -94,24 +76,13 @@ export default function MobileNav({ navItems }: MobileNavProps) {
       >
         {/* Drawer header */}
         <div className="flex items-center justify-between px-4 h-14 border-b border-zinc-800/50 shrink-0">
-        <Link href="/" className="flex items-center gap-2.5">
-          <Image
-            src="/KingFall_logo.png"
-            alt="KingFall Logo"
-            width={28}
-            height={28}
-            className="object-contain"
-          />
-
-          <h1 className="text-lg uppercase tracking-[0.2em]">
-            <span className="kingfall-font">
-              King
-            </span>
-            <span className="kingfall-font">
-              Fall
-            </span>
-          </h1>
-        </Link>
+          <Link href="/" className="flex items-center gap-2.5">
+            <Image src="/KingFall_logo.png" alt="KingFall Logo" width={28} height={28} className="object-contain" />
+            <h1 className="text-lg uppercase tracking-[0.2em]">
+              <span className="kingfall-font">King</span>
+              <span className="kingfall-font">Fall</span>
+            </h1>
+          </Link>
           <button
             onClick={() => setOpen(false)}
             aria-label="Close menu"
@@ -143,15 +114,9 @@ export default function MobileNav({ navItems }: MobileNavProps) {
                     : "text-zinc-400 hover:text-amber-400 hover:bg-emerald-500/5 border-transparent hover:border-emerald-500/10"
                 }`}
               >
-                <span
-                  className={`transition-colors duration-200 ${
-                    isDisabled
-                      ? "text-zinc-500"
-                      : isActive
-                      ? "text-amber-400"
-                      : "text-zinc-500 group-hover:text-amber-400"
-                  }`}
-                >
+                <span className={`transition-colors duration-200 ${
+                  isDisabled ? "text-zinc-500" : isActive ? "text-amber-400" : "text-zinc-500 group-hover:text-amber-400"
+                }`}>
                   {item.icon}
                 </span>
                 <span className="font-semibold text-sm tracking-wide font-mono uppercase">
@@ -165,7 +130,9 @@ export default function MobileNav({ navItems }: MobileNavProps) {
           })}
         </div>
 
-        <div className="px-4 py-5 border-t border-zinc-800/50 shrink-0">
+        {/* ── Profile + Wallet at bottom ── */}
+        <div className="px-4 py-5 border-t border-zinc-800/50 shrink-0 space-y-3">
+          <SidebarProfile />
           <WalletConnection />
         </div>
       </nav>

@@ -68,21 +68,35 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<"stats" | "games" | "achievements">("stats");
 
   const isOwnProfile = connectedAddress && (userId === connectedAddress || userId === user?.id);
-
+  
   const loadProfile = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
     setError(null);
     try {
-      // userId could be a wallet address or internal id — try wallet address first
-      const walletAddr = userId.startsWith("G") && userId.length === 56
-        ? userId
-        : connectedAddress ?? userId;
-
+      // Case 1: userId is a Stellar wallet address (G... 56 chars)
+      // Case 2: userId is an internal kf_ id
+      // Case 3: fallback to connectedAddress
+      let walletAddr: string | undefined;
+  
+      if (userId.startsWith("G") && userId.length === 56) {
+        // Direct wallet address in the URL
+        walletAddr = userId;
+      } else if (userId.startsWith("kf_")) {
+        // Internal ID — resolve to wallet address via the lookup
+        const lookup = await callFn("check-user", { user_id: userId });
+        walletAddr = lookup?.user?.wallet_address;
+      } else {
+        walletAddr = connectedAddress ?? userId;
+      }
+  
+      if (!walletAddr) throw new Error("Could not resolve wallet address");
+  
       const result = await callFn("update-user", {
         action: "get_profile",
         wallet_address: walletAddr,
       });
+  
       setUser(result.user);
       setAchievements(result.achievements ?? []);
       setRecentGames(result.recent_games ?? []);
