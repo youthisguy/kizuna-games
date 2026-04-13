@@ -526,30 +526,32 @@ export default function PlayLobby() {
         {/* Header */}
         <header className="flex items-center justify-between mb-8">
           {connectedAddress ? (
-        <div className="flex items-center border border-zinc-800 rounded-[14px] bg-zinc-900/60 backdrop-blur overflow-hidden">
-        <div className="flex items-center gap-2 px-3 py-1.5 border-r border-zinc-800">
-          <div className="w-[26px] h-[26px] rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
-            <Crown size={13} className="text-amber-400" />
-          </div>
-          <div className="flex flex-col gap-0">
-            <span className="text-[11px] font-semibold text-zinc-200 leading-tight">
-              {kfUser?.username}
-            </span>
-            <span className="text-[10px] text-zinc-500 font-mono tracking-wide leading-tight">
-              {formatAddress(connectedAddress)}
-            </span>
-          </div>
-        </div>
-      
-        <div className="flex items-center gap-1.5 px-3 py-1.5">
-          <span className="text-[11px] font-bold text-amber-400 tracking-wide">
-            {xlmBalance}
-          </span>
-          <span className="text-[12px] font-semibold text-amber-900/80 tracking-widest">
-            XLM
-          </span>
-        </div>
-      </div>
+            <div
+  onClick={() => kfUser?.wallet_address && router.push(`/profile/${kfUser.wallet_address}`)}
+  className="flex items-center border border-zinc-800 rounded-[14px] bg-zinc-900/60 backdrop-blur overflow-hidden cursor-pointer hover:border-amber-900 transition-colors duration-200"
+>
+  <div className="flex items-center gap-2 px-3 py-1.5 border-r border-zinc-800">
+    <div className="w-8 h-8 rounded-xl border border-amber-500/25 bg-amber-500/10 flex items-center justify-center text-base shrink-0">
+      ♔
+    </div>
+    <div className="flex flex-col gap-0">
+      <span className="text-[11px] font-semibold text-zinc-200 leading-tight">
+        {kfUser?.username}
+      </span>
+      <span className="text-[10px] text-zinc-500 font-mono tracking-wide leading-tight">
+        {formatAddress(connectedAddress)}
+      </span>
+    </div>
+  </div>
+  <div className="flex items-center gap-1.5 px-3 py-1.5">
+    <span className="text-[11px] font-bold text-amber-400 tracking-wide">
+      {xlmBalance}
+    </span>
+    <span className="text-[12px] font-semibold text-amber-400 tracking-widest">
+      XLM
+    </span>
+  </div>
+</div>
           ) : (
             <div />
           )}
