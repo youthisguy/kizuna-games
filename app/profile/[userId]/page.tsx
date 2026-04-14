@@ -115,7 +115,6 @@ export default function ProfilePage() {
       style={{ background: "radial-gradient(ellipse 120% 80% at 50% -10%, #1a0a00 0%, #0a0a0f 55%, #050508 100%)", fontFamily: "'Courier New',Courier,monospace" }}>
       <div className="flex flex-col items-center gap-4">
         <RotateCcw size={28} className="animate-spin text-amber-500/60" />
-        <p className="text-[10px] text-zinc-600 uppercase tracking-widest">Loading profile</p>
       </div>
     </div>
   );

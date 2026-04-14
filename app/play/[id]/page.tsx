@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useKingFallAuth } from "@/app/hooks/Usekingfallauth"; 
+import { readCachedGame, writeGameCache, parseFen, parseMoves } from "@/app/lib/gameCache";
 
 const ESCROW_CONTRACT_ID =
   "CCSDLJLDIJSAOKFLX2QWCOVLENA4FFN2EMSGJRFKTIBYY4UUA2HKDGBN";
@@ -820,7 +821,17 @@ export default function GamePage() {
 
   const loadGameState = async () => {
     if (!escrowId) return;
-    setEscrowStatus("loading");
+
+  // ── Instant render from cache ──────────────────────────────────────────
+  const cached = readCachedGame(rawId!);
+  if (cached?.fen) {
+    const b = fenToBoard(cached.fen);
+    setBoard(b);
+    const turn: Color = cached.moves.length % 2 === 0 ? "w" : "b";
+    setCurrentTurn(turn);
+    setMoveHistory(cached.moves);
+    setInCheck(isInCheck(b, turn) ? turn : null);
+  }
     try {
       const ed = await simRead(
         ESCROW_CONTRACT_ID,
@@ -1070,6 +1081,7 @@ export default function GamePage() {
                   setEpSquare(null);
                   setInCheck(isInCheck(b, turn) ? turn : null);
                   setLastMove(null);
+                  writeGameCache(rawId!, fen, moves); 
                 }
                 return moves;
               }
@@ -1242,9 +1254,10 @@ export default function GamePage() {
                 if (s.type === "success") {
                   setTxStatus({
                     type: "success",
-                    msg: "Move confirmed on-chain",
+                    msg: "Move confirmed",
                     hash: s.hash,
                   });
+                  writeGameCache(rawId!, fen, newMoves);  
                 }
               }
             );

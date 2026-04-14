@@ -28,6 +28,7 @@ import {
 import { motion } from "framer-motion";
 import { useKingFallAuth } from "../hooks/Usekingfallauth";
 import UsernameModal from "../components/UsernameModal";
+import { parseFen, parseMoves, writeGameCache } from "../lib/gameCache";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const ESCROW_CONTRACT_ID =
@@ -205,6 +206,7 @@ export default function PlayLobby() {
     const joinParam = new URLSearchParams(window.location.search).get("join");
     if (joinParam) router.replace(`/play/${joinParam}`);
   }, [mounted, router]);
+  
 
   const loadBalance = useCallback(async () => {
     if (!connectedAddress) return;
@@ -238,6 +240,30 @@ export default function PlayLobby() {
               [nativeToScVal(id, { type: "u64" })],
               connectedAddress
             );
+
+            const gameInfo: GameInfo = {
+              id: id.toString(),
+              status: parseStatus(d.status),
+              stake: (Number(d.stake) / 10_000_000).toFixed(2),
+              white: d.white,
+              black: d.black,
+              created_at: Number(d.created_at),
+            };
+  
+            // ── Fetch & cache board state ──────────────────────────────
+            if (gameInfo.status === "Active" || gameInfo.status === "Finished") {
+              try {
+                const gd = await simRead(
+                  GAME_CONTRACT_ID,
+                  "get_game",
+                  [nativeToScVal(id, { type: "u64" })],
+                  connectedAddress || undefined
+                );
+                const fen = parseFen(gd.current_fen);
+                const moves = parseMoves(gd.moves as any[]);
+                if (fen) writeGameCache(id.toString(), fen, moves);
+              } catch {}
+            }
             return {
               id: id.toString(),
               status: parseStatus(d.status),
@@ -386,12 +412,7 @@ export default function PlayLobby() {
   const fetchActiveGames = useCallback(async () => {
     setActiveGamesLoading(true);
     try {
-      const raw = await simRead(
-        ESCROW_CONTRACT_ID,
-        "get_active_games",
-        [],
-        connectedAddress || undefined
-      );
+      const raw = await simRead(ESCROW_CONTRACT_ID, "get_active_games", [], connectedAddress || undefined);
       const ids = normalizeIds(raw);
       const games = await Promise.all(
         ids.map(async (id) => {
@@ -402,14 +423,31 @@ export default function PlayLobby() {
               [nativeToScVal(id, { type: "u64" })],
               connectedAddress || undefined
             );
-            return {
+            const gameInfo: GameInfo = {
               id: id.toString(),
               status: parseStatus(d.status),
               stake: (Number(d.stake) / 10_000_000).toFixed(2),
               white: d.white,
               black: d.black,
               created_at: Number(d.created_at),
-            } as GameInfo;
+            };
+  
+            // ── Fetch & cache board state ──────────────────────────────
+            if (gameInfo.status === "Active" || gameInfo.status === "Finished") {
+              try {
+                const gd = await simRead(
+                  GAME_CONTRACT_ID,
+                  "get_game",
+                  [nativeToScVal(id, { type: "u64" })],
+                  connectedAddress || undefined
+                );
+                const fen = parseFen(gd.current_fen);
+                const moves = parseMoves(gd.moves as any[]);
+                if (fen) writeGameCache(id.toString(), fen, moves);
+              } catch {}
+            }
+  
+            return gameInfo;
           } catch {
             return null;
           }
@@ -442,6 +480,27 @@ export default function PlayLobby() {
               [nativeToScVal(id, { type: "u64" })],
               connectedAddress || undefined
             );
+            const gameInfo: GameInfo = {
+              id: id.toString(),
+              status: parseStatus(d.status),
+              stake: (Number(d.stake) / 10_000_000).toFixed(2),
+              white: d.white,
+              black: d.black,
+              created_at: Number(d.created_at),
+            };
+            if (gameInfo.status === "Active" || gameInfo.status === "Finished") {
+              try {
+                const gd = await simRead(
+                  GAME_CONTRACT_ID,
+                  "get_game",
+                  [nativeToScVal(id, { type: "u64" })],
+                  connectedAddress || undefined
+                );
+                const fen = parseFen(gd.current_fen);
+                const moves = parseMoves(gd.moves as any[]);
+                if (fen) writeGameCache(id.toString(), fen, moves);
+              } catch {}
+            }
             return {
               id: id.toString(),
               status: parseStatus(d.status),

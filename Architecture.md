@@ -220,7 +220,7 @@ diffBoards(before, after)
 
 ### Read Without Wallet
 
-All contract reads use a funded fallback account as the simulation source. This mirrors the pattern from the Stellar launchpad reference implementation — the RPC simulation requires a valid account with a sequence number, but the result is read-only and the account never signs anything.
+All contract reads use a funded fallback account as the simulation source. The RPC simulation requires a valid account with a sequence number, but the result is read-only and the account never signs anything.
 
 ```typescript
 const FALLBACK_ACCOUNT = "GDXK7EY...RMU6"; // funded testnet account
