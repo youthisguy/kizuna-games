@@ -139,7 +139,7 @@ interface GameInfo {
 
 export default function PlayLobby() {
   const { address: connectedAddress, walletsKit } = useWallet();
-  const { refreshUser } = useKingFallAuth();
+ 
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [myGames, setMyGames] = useState<GameInfo[]>([]);
@@ -173,6 +173,7 @@ export default function PlayLobby() {
     user: kfUser,
     showUsernameModal,
     registerUser,
+    refreshUser,
     isLoading: authLoading,
   } = useKingFallAuth();
 
@@ -317,8 +318,9 @@ export default function PlayLobby() {
     setLoading(false);
     if (result) {
       const id = scValToNative(result) as bigint;
-      // Refresh sidebar profile game count
-      refreshUser?.();
+      refreshUser();    
+      fetchMyGames();     
+      fetchActiveGames();    
       router.push(`/play/${id.toString()}`);
     }
   };

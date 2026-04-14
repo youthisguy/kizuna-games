@@ -1419,7 +1419,6 @@ export default function GamePage() {
             network: "testnet",
           }).catch((e) => console.warn("[recordGameResult]", e));
         }
- 
         await loadGameState();
       } else {
         setTxStatus({ type: "error", msg: "Transaction failed or rejected" });
