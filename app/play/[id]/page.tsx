@@ -1357,6 +1357,19 @@ export default function GamePage() {
       );
       return;
     }
+    if (outcome !== "Draw") {
+      const callerWouldWin =
+        (outcome === "WhiteWins" && connectedAddress === escrowData?.white) ||
+        (outcome === "BlackWins" && connectedAddress === escrowData?.black);
+  
+      const isCheckmate = getGameResult(board, outcome === "WhiteWins" ? "b" : "w") === "checkmate";
+  
+      if (callerWouldWin && !isCheckmate) {
+        console.error("[handleGameOver] Blocked: caller cannot award themselves the pot via resign");
+        setTxStatus({ type: "error", msg: "Invalid outcome — cannot resign in your favor" });
+        return;
+      }
+    }
   
     setTxStatus({
       type: "pending",
@@ -1432,11 +1445,10 @@ export default function GamePage() {
     }
   };
 
-  const handleResign = () =>
-    handleGameOver(
-      currentTurn === "w" ? "BlackWins" : "WhiteWins",
-      moveHistory
-    );
+  const handleResign = () => {
+    const outcome = playerColor === "w" ? "BlackWins" : "WhiteWins";
+    handleGameOver(outcome, moveHistory);
+  };
   const handleOfferDraw = async () => {
     setDrawOffered(true);
     await escrowTx("offer_draw", [
