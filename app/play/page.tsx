@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, JSX } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "../contexts/WalletContext";
 import {
@@ -28,7 +28,13 @@ import {
 import { motion } from "framer-motion";
 import { useKingFallAuth } from "../hooks/Usekingfallauth";
 import UsernameModal from "../components/UsernameModal";
-import { parseFen, parseMoves, writeGameCache } from "../lib/gameCache";
+import {
+  GameCacheEntry,
+  parseFen,
+  parseMoves,
+  readCachedGame,
+  writeGameCache,
+} from "../lib/gameCache";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const ESCROW_CONTRACT_ID =
@@ -138,9 +144,106 @@ interface GameInfo {
   created_at: number;
 }
 
+// Mini board preview using cached data
+const MiniChessboard = ({ gameId }: { gameId: string }) => {
+  const [cacheEntry, setCacheEntry] = useState<GameCacheEntry | null>(null);
+
+  useEffect(() => {
+    const loadCache = () => {
+      const entry = readCachedGame(gameId);
+      setCacheEntry(entry);
+    };
+
+    loadCache();
+
+    // Refresh when cache updates
+    const handleStorageChange = () => loadCache();
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [gameId]);
+
+  // Fallback to starting position for Open/Waiting games
+  const displayFen = cacheEntry?.fen || 
+    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+  const rows = displayFen.split(" ")[0].split("/");
+
+  return (
+    <div className="w-14 h-14 border border-zinc-700 rounded-lg overflow-hidden grid grid-cols-8 grid-rows-8 bg-zinc-900 flex-shrink-0 shadow-inner">
+      {rows.flatMap((row, rowIndex) => {
+        let colIndex = 0;
+        const squares: JSX.Element[] = [];
+
+        row.split("").forEach((char, _) => {
+          if (/\d/.test(char)) {
+            // Empty squares
+            const emptyCount = parseInt(char);
+            for (let k = 0; k < emptyCount; k++) {
+              const isLight = (rowIndex + colIndex) % 2 === 0;
+              squares.push(
+                <div
+                  key={`sq-${rowIndex}-${colIndex}`}
+                  className={`w-full h-full ${isLight ? "bg-[#f0d9b5]" : "bg-[#b58863]"}`}
+                />
+              );
+              colIndex++;
+            }
+          } else {
+            // Piece
+            const isLight = (rowIndex + colIndex) % 2 === 0;
+            const isWhitePiece = char === char.toUpperCase();
+            const pieceSymbol = getPieceUnicode(char);
+
+            squares.push(
+              <div
+                key={`sq-${rowIndex}-${colIndex}`}
+                className={`flex items-center justify-center text-[11px] font-bold select-none ${
+                  isLight ? "bg-[#f0d9b5]" : "bg-[#b58863]"
+                }`}
+              >
+                <span 
+                  className={
+                    isWhitePiece 
+                      ? "text-white drop-shadow-md scale-110" 
+                      : "text-black drop-shadow-sm"
+                  }
+                >
+                  {pieceSymbol}
+                </span>
+              </div>
+            );
+            colIndex++;
+          }
+        });
+
+        return squares;
+      })}
+    </div>
+  );
+};
+
+// Helper: Piece to Unicode
+const getPieceUnicode = (p: string): string => {
+  const map: Record<string, string> = {
+    K: "♔",
+    Q: "♕",
+    R: "♖",
+    B: "♗",
+    N: "♘",
+    P: "♙",
+    k: "♚",
+    q: "♛",
+    r: "♜",
+    b: "♝",
+    n: "♞",
+    p: "♟︎",
+  };
+  return map[p] || "?";
+};
+
 export default function PlayLobby() {
   const { address: connectedAddress, walletsKit } = useWallet();
- 
+
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [myGames, setMyGames] = useState<GameInfo[]>([]);
@@ -206,7 +309,6 @@ export default function PlayLobby() {
     const joinParam = new URLSearchParams(window.location.search).get("join");
     if (joinParam) router.replace(`/play/${joinParam}`);
   }, [mounted, router]);
-  
 
   const loadBalance = useCallback(async () => {
     if (!connectedAddress) return;
@@ -249,9 +351,12 @@ export default function PlayLobby() {
               black: d.black,
               created_at: Number(d.created_at),
             };
-  
+
             // ── Fetch & cache board state ──────────────────────────────
-            if (gameInfo.status === "Active" || gameInfo.status === "Finished") {
+            if (
+              gameInfo.status === "Active" ||
+              gameInfo.status === "Finished"
+            ) {
               try {
                 const gd = await simRead(
                   GAME_CONTRACT_ID,
@@ -259,19 +364,33 @@ export default function PlayLobby() {
                   [nativeToScVal(id, { type: "u64" })],
                   connectedAddress || undefined
                 );
+
                 const fen = parseFen(gd.current_fen);
                 const moves = parseMoves(gd.moves as any[]);
-                if (fen) writeGameCache(id.toString(), fen, moves);
-              } catch {}
+
+                console.log(`[Lobby Board Received] Game #${id}`, {
+                  gameId: id.toString(),
+                  status: gameInfo.status,
+                  fen: fen,
+                  moveCount: moves.length,
+                  raw_fen: gd.current_fen,
+                  timestamp: new Date().toISOString(),
+                });
+
+                if (fen) {
+                  writeGameCache(id.toString(), fen, moves);
+                  console.log(
+                    `[Lobby] Board cached successfully for game #${id}`
+                  );
+                }
+              } catch (err) {
+                console.warn(
+                  `[Lobby] Failed to fetch/cache board for game #${id}`,
+                  err
+                );
+              }
             }
-            return {
-              id: id.toString(),
-              status: parseStatus(d.status),
-              stake: (Number(d.stake) / 10_000_000).toFixed(2),
-              white: d.white,
-              black: d.black,
-              created_at: Number(d.created_at),
-            } as GameInfo;
+            return gameInfo;
           } catch {
             return null;
           }
@@ -344,9 +463,9 @@ export default function PlayLobby() {
     setLoading(false);
     if (result) {
       const id = scValToNative(result) as bigint;
-      refreshUser();    
-      fetchMyGames();     
-      fetchActiveGames();    
+      refreshUser();
+      fetchMyGames();
+      fetchActiveGames();
       router.push(`/play/${id.toString()}`);
     }
   };
@@ -412,7 +531,12 @@ export default function PlayLobby() {
   const fetchActiveGames = useCallback(async () => {
     setActiveGamesLoading(true);
     try {
-      const raw = await simRead(ESCROW_CONTRACT_ID, "get_active_games", [], connectedAddress || undefined);
+      const raw = await simRead(
+        ESCROW_CONTRACT_ID,
+        "get_active_games",
+        [],
+        connectedAddress || undefined
+      );
       const ids = normalizeIds(raw);
       const games = await Promise.all(
         ids.map(async (id) => {
@@ -431,9 +555,13 @@ export default function PlayLobby() {
               black: d.black,
               created_at: Number(d.created_at),
             };
-  
+
             // ── Fetch & cache board state ──────────────────────────────
-            if (gameInfo.status === "Active" || gameInfo.status === "Finished") {
+            if (
+              gameInfo.status === "Active" ||
+              gameInfo.status === "Finished" ||
+              gameInfo.status === "Waiting"
+            ) {
               try {
                 const gd = await simRead(
                   GAME_CONTRACT_ID,
@@ -441,12 +569,33 @@ export default function PlayLobby() {
                   [nativeToScVal(id, { type: "u64" })],
                   connectedAddress || undefined
                 );
+
                 const fen = parseFen(gd.current_fen);
                 const moves = parseMoves(gd.moves as any[]);
-                if (fen) writeGameCache(id.toString(), fen, moves);
-              } catch {}
+
+                console.log(`[Lobby Board Received] Game #${id}`, {
+                  gameId: id.toString(),
+                  status: gameInfo.status,
+                  fen: fen,
+                  moveCount: moves.length,
+                  raw_fen: gd.current_fen,
+                  timestamp: new Date().toISOString(),
+                });
+
+                if (fen) {
+                  writeGameCache(id.toString(), fen, moves);
+                  console.log(
+                    `[Lobby] Board cached successfully for game #${id}`
+                  );
+                }
+              } catch (err) {
+                console.warn(
+                  `[Lobby] Failed to fetch/cache board for game #${id}`,
+                  err
+                );
+              }
             }
-  
+
             return gameInfo;
           } catch {
             return null;
@@ -488,7 +637,11 @@ export default function PlayLobby() {
               black: d.black,
               created_at: Number(d.created_at),
             };
-            if (gameInfo.status === "Active" || gameInfo.status === "Finished") {
+            // ── Fetch, log & cache board state ──────────────────────────────
+            if (
+              gameInfo.status === "Active" ||
+              gameInfo.status === "Finished"
+            ) {
               try {
                 const gd = await simRead(
                   GAME_CONTRACT_ID,
@@ -496,19 +649,33 @@ export default function PlayLobby() {
                   [nativeToScVal(id, { type: "u64" })],
                   connectedAddress || undefined
                 );
+
                 const fen = parseFen(gd.current_fen);
                 const moves = parseMoves(gd.moves as any[]);
-                if (fen) writeGameCache(id.toString(), fen, moves);
-              } catch {}
+
+                console.log(`[Lobby Board Received] Game #${id}`, {
+                  gameId: id.toString(),
+                  status: gameInfo.status,
+                  fen: fen,
+                  moveCount: moves.length,
+                  raw_fen: gd.current_fen,
+                  timestamp: new Date().toISOString(),
+                });
+
+                if (fen) {
+                  writeGameCache(id.toString(), fen, moves);
+                  console.log(
+                    `[Lobby] Board cached successfully for game #${id}`
+                  );
+                }
+              } catch (err) {
+                console.warn(
+                  `[Lobby] Failed to fetch/cache board for game #${id}`,
+                  err
+                );
+              }
             }
-            return {
-              id: id.toString(),
-              status: parseStatus(d.status),
-              stake: (Number(d.stake) / 10_000_000).toFixed(2),
-              white: d.white,
-              black: d.black,
-              created_at: Number(d.created_at),
-            } as GameInfo;
+            return gameInfo;
           } catch {
             return null;
           }
@@ -541,27 +708,31 @@ export default function PlayLobby() {
   );
 
   const GameRow = ({ g }: { g: GameInfo }) => (
-    <div className="flex items-center justify-between py-2.5 border-b border-zinc-800/40 last:border-0">
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="text-[10px] text-amber-400 font-black font-mono shrink-0">
-          #{g.id}
-        </span>
-        <div className="min-w-0">
+    <div className="flex items-center justify-between py-2.5 border-b border-zinc-800/40 last:border-0 group">
+      <div className="flex items-center gap-3 min-w-0">
+        {/* Mini Board Preview */}
+        <MiniChessboard gameId={g.id} />
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-amber-400 font-black font-mono shrink-0">
+              #{g.id}
+            </span>
+            <StatusBadge status={g.status} />
+          </div>
           <p className="text-[10px] text-zinc-300 font-mono truncate">
             {formatAddress(g.white)}
           </p>
           <p className="text-[9px] text-zinc-600">{g.stake} XLM each</p>
         </div>
       </div>
-      <div className="flex items-center gap-1.5 shrink-0 ml-2">
-        <StatusBadge status={g.status} />
-        <button
-          onClick={() => router.push(`/play/${g.id}`)}
-          className="text-[9px] px-2 py-0.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white transition-colors font-bold"
-        >
-          View
-        </button>
-      </div>
+
+      <button
+        onClick={() => router.push(`/play/${g.id}`)}
+        className="text-[9px] px-3 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white hover:border-amber-500/50 transition-all font-bold ml-2"
+      >
+        View
+      </button>
     </div>
   );
 
@@ -594,31 +765,34 @@ export default function PlayLobby() {
         <header className="flex items-center justify-between mb-8">
           {connectedAddress ? (
             <div
-  onClick={() => kfUser?.wallet_address && router.push(`/profile/${kfUser.wallet_address}`)}
-  className="flex items-center border border-zinc-800 rounded-[14px] bg-zinc-900/60 backdrop-blur overflow-hidden cursor-pointer hover:border-amber-900 transition-colors duration-200"
->
-  <div className="flex items-center gap-2 px-3 py-1.5 border-r border-zinc-800">
-    <div className="w-8 h-8 rounded-xl border border-amber-500/25 bg-amber-500/10 flex items-center justify-center text-base shrink-0">
-      ♔
-    </div>
-    <div className="flex flex-col gap-0">
-      <span className="text-[11px] font-semibold text-zinc-200 leading-tight">
-        {kfUser?.username}
-      </span>
-      <span className="text-[10px] text-zinc-500 font-mono tracking-wide leading-tight">
-        {formatAddress(connectedAddress)}
-      </span>
-    </div>
-  </div>
-  <div className="flex items-center gap-1.5 px-3 py-1.5">
-    <span className="text-[11px] font-bold text-amber-400 tracking-wide">
-      {xlmBalance}
-    </span>
-    <span className="text-[12px] font-semibold text-amber-400 tracking-widest">
-      XLM
-    </span>
-  </div>
-</div>
+              onClick={() =>
+                kfUser?.wallet_address &&
+                router.push(`/profile/${kfUser.wallet_address}`)
+              }
+              className="flex items-center border border-zinc-800 rounded-[14px] bg-zinc-900/60 backdrop-blur overflow-hidden cursor-pointer hover:border-amber-900 transition-colors duration-200"
+            >
+              <div className="flex items-center gap-2 px-3 py-1.5 border-r border-zinc-800">
+                <div className="w-8 h-8 rounded-xl border border-amber-500/25 bg-amber-500/10 flex items-center justify-center text-base shrink-0">
+                  ♔
+                </div>
+                <div className="flex flex-col gap-0">
+                  <span className="text-[11px] font-semibold text-zinc-200 leading-tight">
+                    {kfUser?.username}
+                  </span>
+                  <span className="text-[10px] text-zinc-500 font-mono tracking-wide leading-tight">
+                    {formatAddress(connectedAddress)}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1.5">
+                <span className="text-[11px] font-bold text-amber-400 tracking-wide">
+                  {xlmBalance}
+                </span>
+                <span className="text-[12px] font-semibold text-amber-400 tracking-widest">
+                  XLM
+                </span>
+              </div>
+            </div>
           ) : (
             <div />
           )}
