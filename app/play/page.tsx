@@ -173,7 +173,7 @@ const MiniChessboard = ({ gameId }: { gameId: string }) => {
   const rows = displayFen.split(" ")[0].split("/");
 
   return (
-    <div className="w-23 h-23 border border-zinc-700 rounded-lg overflow-hidden grid grid-cols-8 grid-rows-8 bg-zinc-900 shrink-0 shadow-inner">
+    <div className="w-28 h-28 border border-zinc-700 rounded-lg overflow-hidden grid grid-cols-8 grid-rows-8 bg-zinc-900 shrink-0 shadow-inner">
       {rows.flatMap((row, rowIndex) => {
         let colIndex = 0;
         const squares: JSX.Element[] = [];
@@ -756,9 +756,9 @@ export default function PlayLobby() {
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] text-amber-400 font-black font-mono shrink-0">
+              {/* <span className="text-[10px] text-amber-400 font-black font-mono shrink-0">
                 #{g.id}
-              </span>
+              </span> */}
 
               <StatusBadge status={g.status} />
             </div>
@@ -773,7 +773,7 @@ export default function PlayLobby() {
 
         <button
           onClick={() => router.push(`/play/${g.id}`)}
-          className={`flex items-center justify-center w-9 h-9 rounded-xl transition-all flex-shrink-0 ${
+          className={`flex items-center justify-center w-4 h-4 rounded-xl transition-all flex-shrink-0 ${
             isMyTurnToPlay
               ? "bg-red-500 hover:bg-red-600 text-white shadow-md shadow-red-500/50"
               : "bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-600"
@@ -781,9 +781,9 @@ export default function PlayLobby() {
           title={isMyTurnToPlay ? "Play Now" : "View Game"}
         >
           {isMyTurnToPlay ? (
-            <Swords size={18} className="drop-shadow-sm" />
+            <ChevronRight size={10} />
           ) : (
-            <ChevronRight size={18} />
+            <ChevronRight size={10} />
           )}
         </button>
       </div>
@@ -1350,7 +1350,21 @@ export default function PlayLobby() {
                       No games yet
                     </p>
                   ) : (
-                    myGames.map((g) => <GameRow key={g.id} g={g} />)
+                    myGames
+                      .slice()
+                      .sort((a, b) => {
+                        const aIsMyTurnToPlay =
+                          a.status === "Active" && a.isMyTurn === true;
+                        const bIsMyTurnToPlay =
+                          b.status === "Active" && b.isMyTurn === true;
+
+                        if (aIsMyTurnToPlay && !bIsMyTurnToPlay) return -1;
+                        if (!aIsMyTurnToPlay && bIsMyTurnToPlay) return 1;
+
+                        // Then newest games first
+                        return b.created_at - a.created_at;
+                      })
+                      .map((g) => <GameRow key={g.id} g={g} />)
                   )}
                   <button
                     onClick={fetchMyGames}
@@ -1537,7 +1551,20 @@ export default function PlayLobby() {
                           No games yet
                         </p>
                       ) : (
-                        myGames.map((g) => <GameRow key={g.id} g={g} />)
+                        myGames
+                          .slice()
+                          .sort((a, b) => {
+                            const aIsMyTurnToPlay =
+                              a.status === "Active" && a.isMyTurn === true;
+                            const bIsMyTurnToPlay =
+                              b.status === "Active" && b.isMyTurn === true;
+
+                            if (aIsMyTurnToPlay && !bIsMyTurnToPlay) return -1;
+                            if (!aIsMyTurnToPlay && bIsMyTurnToPlay) return 1;
+
+                            return b.created_at - a.created_at;
+                          })
+                          .map((g) => <GameRow key={g.id} g={g} />)
                       )}
                       <button
                         onClick={fetchMyGames}

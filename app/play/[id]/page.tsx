@@ -28,8 +28,13 @@ import {
   Zap,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useKingFallAuth } from "@/app/hooks/Usekingfallauth"; 
-import { readCachedGame, writeGameCache, parseFen, parseMoves } from "@/app/lib/gameCache";
+import { useKingFallAuth } from "@/app/hooks/Usekingfallauth";
+import {
+  readCachedGame,
+  writeGameCache,
+  parseFen,
+  parseMoves,
+} from "@/app/lib/gameCache";
 
 const ESCROW_CONTRACT_ID =
   "CCSDLJLDIJSAOKFLX2QWCOVLENA4FFN2EMSGJRFKTIBYY4UUA2HKDGBN";
@@ -822,16 +827,16 @@ export default function GamePage() {
   const loadGameState = async () => {
     if (!escrowId) return;
 
-  // ── Instant render from cache ──────────────────────────────────────────
-  const cached = readCachedGame(rawId!);
-  if (cached?.fen) {
-    const b = fenToBoard(cached.fen);
-    setBoard(b);
-    const turn: Color = cached.moves.length % 2 === 0 ? "w" : "b";
-    setCurrentTurn(turn);
-    setMoveHistory(cached.moves);
-    setInCheck(isInCheck(b, turn) ? turn : null);
-  }
+    // ── Instant render from cache ──────────────────────────────────────────
+    const cached = readCachedGame(rawId!);
+    if (cached?.fen) {
+      const b = fenToBoard(cached.fen);
+      setBoard(b);
+      const turn: Color = cached.moves.length % 2 === 0 ? "w" : "b";
+      setCurrentTurn(turn);
+      setMoveHistory(cached.moves);
+      setInCheck(isInCheck(b, turn) ? turn : null);
+    }
     try {
       const ed = await simRead(
         ESCROW_CONTRACT_ID,
@@ -855,6 +860,13 @@ export default function GamePage() {
           setPlayerColor("b");
       }
       if (status === "Active" || status === "Finished" || status === "Drawn") {
+        setWinner(
+          status === "Drawn"
+            ? "draw"
+            : ed.white === connectedAddress
+            ? "w"
+            : "b"
+        );
         const found = await findAndSetGameContract();
         if (
           !found &&
@@ -999,7 +1011,7 @@ export default function GamePage() {
   // Live countdown timer
   useEffect(() => {
     if (escrowStatus !== "Active") return;
-  
+
     timerRef.current = setInterval(() => {
       if (currentTurn === "w") {
         setWhiteTimeLeft((t) => Math.max(0, t - 1));
@@ -1007,7 +1019,7 @@ export default function GamePage() {
         setBlackTimeLeft((t) => Math.max(0, t - 1));
       }
     }, 1000);
-  
+
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
@@ -1081,7 +1093,7 @@ export default function GamePage() {
                   setEpSquare(null);
                   setInCheck(isInCheck(b, turn) ? turn : null);
                   setLastMove(null);
-                  writeGameCache(rawId!, fen, moves); 
+                  writeGameCache(rawId!, fen, moves);
                 }
                 return moves;
               }
@@ -1124,7 +1136,7 @@ export default function GamePage() {
   // ── Chess ─────────────────────────────────────────────────────────────────
   const handleSquareClick = async (row: number, col: number) => {
     if (escrowStatus !== "Active") return;
-    if (viewIndex !== null) return; 
+    if (viewIndex !== null) return;
     if (currentTurn !== playerColor) return;
     if (selected) {
       const isValid = validMoves.some((m) => m.row === row && m.col === col);
@@ -1204,7 +1216,7 @@ export default function GamePage() {
         const result = getGameResult(nb, newTurn, newCastling, newEp);
         if (result === "checkmate") {
           const outcome = currentTurn === "w" ? "WhiteWins" : "BlackWins";
-          await handleGameOver(outcome, newMoves);   
+          await handleGameOver(outcome, newMoves);
         } else if (result === "stalemate") {
           await handleGameOver("Draw", newMoves);
         }
@@ -1257,7 +1269,7 @@ export default function GamePage() {
                     msg: "Move confirmed",
                     hash: s.hash,
                   });
-                  writeGameCache(rawId!, fen, newMoves);  
+                  writeGameCache(rawId!, fen, newMoves);
                 }
               }
             );
@@ -1374,21 +1386,28 @@ export default function GamePage() {
       const callerWouldWin =
         (outcome === "WhiteWins" && connectedAddress === escrowData?.white) ||
         (outcome === "BlackWins" && connectedAddress === escrowData?.black);
-  
-      const isCheckmate = getGameResult(board, outcome === "WhiteWins" ? "b" : "w") === "checkmate";
-  
+
+      const isCheckmate =
+        getGameResult(board, outcome === "WhiteWins" ? "b" : "w") ===
+        "checkmate";
+
       if (callerWouldWin && !isCheckmate) {
-        console.error("[handleGameOver] Blocked: caller cannot award themselves the pot via resign");
-        setTxStatus({ type: "error", msg: "Invalid outcome — cannot resign in your favor" });
+        console.error(
+          "[handleGameOver] Blocked: caller cannot award themselves the pot via resign"
+        );
+        setTxStatus({
+          type: "error",
+          msg: "Invalid outcome — cannot resign in your favor",
+        });
         return;
       }
     }
-  
+
     setTxStatus({
       type: "pending",
       msg: outcome === "Draw" ? "Accepting draw..." : "Finishing game...",
     });
-  
+
     try {
       const txResult = await escrowTx("finish_game", [
         nativeToScVal(escrowId, { type: "u64" }),
@@ -1396,7 +1415,7 @@ export default function GamePage() {
         xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(outcome)]),
         nativeToScVal(moves.join(" "), { type: "string" }),
       ]);
-  
+
       if (gameContractId) {
         sendTx(
           connectedAddress,
@@ -1412,34 +1431,42 @@ export default function GamePage() {
           () => {}
         ).catch(console.warn);
       }
-  
+
       if (txResult) {
         const winnerColor =
-          outcome === "WhiteWins" ? "w" : outcome === "BlackWins" ? "b" : "draw";
-  
+          outcome === "WhiteWins"
+            ? "w"
+            : outcome === "BlackWins"
+            ? "b"
+            : "draw";
+
         setWinner(winnerColor);
         setEscrowStatus("Finished");
-  
+
         // ── Record result to backend ──────────────────────────────────────────
         if (escrowData) {
           const txHash =
             typeof txResult === "object" && (txResult as any).hash
               ? (txResult as any).hash
               : undefined;
-  
+
           recordGameResult({
-            escrow_game_id:   Number(escrowId),
-            game_contract_id: gameContractId ? Number(gameContractId) : undefined,
-            white_address:    escrowData.white,
-            black_address:    escrowData.black,
+            escrow_game_id: Number(escrowId),
+            game_contract_id: gameContractId
+              ? Number(gameContractId)
+              : undefined,
+            white_address: escrowData.white,
+            black_address: escrowData.black,
             outcome,
-            stake_each:       Number(escrowData.stake),
-            tx_hash_finish:   txHash,
-            move_count:       moves.length,
-            pgn:              moves.join(" "),
+            stake_each: Number(escrowData.stake),
+            tx_hash_finish: txHash,
+            move_count: moves.length,
+            pgn: moves.join(" "),
             termination:
-              outcome === "Draw" ? "Draw" :
-              getGameResult(board, outcome === "WhiteWins" ? "b" : "w") === "checkmate"
+              outcome === "Draw"
+                ? "Draw"
+                : getGameResult(board, outcome === "WhiteWins" ? "b" : "w") ===
+                  "checkmate"
                 ? "Checkmate"
                 : "Resignation",
             network: "testnet",
@@ -1767,7 +1794,7 @@ export default function GamePage() {
                       {joinLoading ? (
                         <>
                           <RotateCcw size={14} className="animate-spin" />{" "}
-                          Joining 
+                          Joining
                         </>
                       ) : (
                         <>Stake & Join as Black</>
@@ -1990,7 +2017,7 @@ export default function GamePage() {
                 opColor === "w" ? escrowData?.white : escrowData?.black;
               return (
                 <div
-                  className={`w-full max-w-[480px] flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
+                  className={`w-full max-w-120 flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
                     opActive
                       ? "border-amber-500/40 bg-amber-500/5"
                       : "border-zinc-800/40 bg-zinc-900/20"
@@ -2020,23 +2047,71 @@ export default function GamePage() {
                     </div>
                     <div
                       className={`px-3 py-1.5 rounded-lg font-black text-sm tabular-nums border ${
-                        opActive
+                        escrowStatus === "Finished" || escrowStatus === "Drawn"
+                          ? winner === opColor
+                            ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                            : winner === "draw"
+                            ? "bg-zinc-800 text-zinc-400 border-zinc-700"
+                            : "bg-zinc-900 text-zinc-600 border-zinc-800"
+                          : opActive
                           ? "bg-amber-500 text-black border-amber-400"
                           : "bg-zinc-900 text-zinc-500 border-zinc-800"
                       }`}
                     >
-                      {formatTime(opTime)}
+                      {escrowStatus === "Finished" || escrowStatus === "Drawn"
+                        ? winner === opColor
+                          ? "Won"
+                          : winner === "draw"
+                          ? "Draw"
+                          : "Lost"
+                        : formatTime(opTime)}
                     </div>
                   </div>
                 </div>
               );
             })()}
-
-            {renderBoard(
-              escrowStatus === "Active" &&
-                (isWhitePlayer || isBlackPlayer) &&
-                !isViewingHistory
-            )}
+            {/* Result banner */}
+            {(escrowStatus === "Finished" || escrowStatus === "Drawn") &&
+              winner && (
+                <div
+                  className={`w-full max-w-120 flex items-center justify-between px-4 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest ${
+                    winner === "draw"
+                      ? "border-zinc-600/30 bg-zinc-800/40 text-zinc-400"
+                      : winner === playerColor
+                      ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
+                      : "border-zinc-700/30 bg-zinc-900/40 text-zinc-500"
+                  }`}
+                >
+                  <span>
+                    {winner === "draw"
+                      ? "½ · ½  Draw"
+                      : winner === playerColor
+                      ? "1 · 0  You won"
+                      : "0 · 1  You lost"}
+                  </span>
+                  <span className="text-base">
+                    {winner === "draw"
+                      ? "🤝"
+                      : winner === playerColor
+                      ? "🏆"
+                      : "✗"}
+                  </span>
+                </div>
+              )}
+            <div className="relative">
+              {renderBoard(
+                escrowStatus === "Active" &&
+                  (isWhitePlayer || isBlackPlayer) &&
+                  !isViewingHistory
+              )}
+              {(escrowStatus === "Finished" || escrowStatus === "Drawn") &&
+                winner && (
+                  <div
+                    className="absolute inset-0 rounded-xl pointer-events-none"
+                    style={{ background: "rgba(5,5,8,0.35)" }}
+                  />
+                )}
+            </div>
 
             {/* Move navigation */}
             {/* {moveHistory.length > 0 && (
@@ -2092,7 +2167,7 @@ export default function GamePage() {
               const myCap = playerColor === "w" ? capturedW : capturedB;
               return (
                 <div
-                  className={`w-full max-w-[480px] flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
+                  className={`w-full max-w-120 flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
                     myActive
                       ? "border-amber-500/40 bg-amber-500/5"
                       : "border-zinc-800/40 bg-zinc-900/20"
@@ -2124,12 +2199,24 @@ export default function GamePage() {
                     </div>
                     <div
                       className={`px-3 py-1.5 rounded-lg font-black text-sm tabular-nums border ${
-                        myActive
+                        escrowStatus === "Finished" || escrowStatus === "Drawn"
+                          ? winner === playerColor
+                            ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                            : winner === "draw"
+                            ? "bg-zinc-800 text-zinc-400 border-zinc-700"
+                            : "bg-zinc-900 text-zinc-600 border-zinc-800"
+                          : myActive
                           ? "bg-amber-500 text-black border-amber-400"
                           : "bg-zinc-900 text-zinc-500 border-zinc-800"
                       }`}
                     >
-                      {formatTime(myTime)}
+                      {escrowStatus === "Finished" || escrowStatus === "Drawn"
+                        ? winner === playerColor
+                          ? "Won"
+                          : winner === "draw"
+                          ? "Draw"
+                          : "Lost"
+                        : formatTime(myTime)}
                     </div>
                   </div>
                 </div>
@@ -2153,8 +2240,78 @@ export default function GamePage() {
               </p>
             </div>
 
-            <div className="border border-zinc-800 rounded-2xl p-4 bg-zinc-900/20">
-              {escrowStatus === "Active" ? (
+            <div
+              className={`rounded-2xl p-4 border ${
+                escrowStatus === "Finished" || escrowStatus === "Drawn"
+                  ? winner === playerColor
+                    ? "border-amber-500/40 bg-amber-500/8"
+                    : winner === "draw"
+                    ? "border-zinc-600/40 bg-zinc-800/30"
+                    : "border-zinc-800/40 bg-zinc-900/20"
+                  : "border-zinc-800 bg-zinc-900/20"
+              }`}
+            >
+              {(escrowStatus === "Finished" || escrowStatus === "Drawn") &&
+              winner ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        winner === "draw" ? "bg-zinc-400" : "bg-amber-400"
+                      }`}
+                    />
+                    <span className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">
+                      Game Over
+                    </span>
+                  </div>
+                  {/* Winner row */}
+                  <div className="flex items-center justify-between py-2 px-3 rounded-xl bg-emerald-500/8 border border-emerald-500/20">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">
+                        {winner === "w" || winner === "draw" ? "♕" : "♛"}
+                      </span>
+                      <div>
+                        <p className="text-[10px] font-black text-emerald-400 uppercase tracking-wider">
+                          {winner === "draw"
+                            ? "Draw"
+                            : winner === "w"
+                            ? "White wins"
+                            : "Black wins"}
+                        </p>
+                        <p className="text-[9px] text-zinc-600 font-mono">
+                          {winner === "draw"
+                            ? formatAddress(escrowData?.white || "")
+                            : winner === "w"
+                            ? formatAddress(escrowData?.white || "")
+                            : formatAddress(escrowData?.black || "")}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-emerald-400 text-lg">🏆</span>
+                  </div>
+                  {/* Loser row — only for decisive games */}
+                  {winner !== "draw" && (
+                    <div className="flex items-center justify-between py-2 px-3 rounded-xl bg-zinc-900/40 border border-zinc-800/50">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base opacity-40">
+                          {winner === "w" ? "♛" : "♕"}
+                        </span>
+                        <div>
+                          <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                            {winner === "w" ? "Black" : "White"}
+                          </p>
+                          <p className="text-[9px] text-zinc-700 font-mono">
+                            {winner === "w"
+                              ? formatAddress(escrowData?.black || "")
+                              : formatAddress(escrowData?.white || "")}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-zinc-700 text-sm">✗</span>
+                    </div>
+                  )}
+                </div>
+              ) : escrowStatus === "Active" ? (
                 <>
                   <div className="flex items-center gap-2 mb-2">
                     <div
