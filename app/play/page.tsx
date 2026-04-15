@@ -142,6 +142,9 @@ interface GameInfo {
   white: string;
   black?: string;
   created_at: number;
+  isMyTurn?: boolean;
+  currentPlayer?: "white" | "black";
+  moveCount?: number;
 }
 
 // Mini board preview using cached data
@@ -163,13 +166,14 @@ const MiniChessboard = ({ gameId }: { gameId: string }) => {
   }, [gameId]);
 
   // Fallback to starting position for Open/Waiting games
-  const displayFen = cacheEntry?.fen || 
+  const displayFen =
+    cacheEntry?.fen ||
     "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
   const rows = displayFen.split(" ")[0].split("/");
 
   return (
-    <div className="w-14 h-14 border border-zinc-700 rounded-lg overflow-hidden grid grid-cols-8 grid-rows-8 bg-zinc-900 flex-shrink-0 shadow-inner">
+    <div className="w-23 h-23 border border-zinc-700 rounded-lg overflow-hidden grid grid-cols-8 grid-rows-8 bg-zinc-900 shrink-0 shadow-inner">
       {rows.flatMap((row, rowIndex) => {
         let colIndex = 0;
         const squares: JSX.Element[] = [];
@@ -183,7 +187,9 @@ const MiniChessboard = ({ gameId }: { gameId: string }) => {
               squares.push(
                 <div
                   key={`sq-${rowIndex}-${colIndex}`}
-                  className={`w-full h-full ${isLight ? "bg-[#f0d9b5]" : "bg-[#b58863]"}`}
+                  className={`w-full h-full ${
+                    isLight ? "bg-[#f0d9b5]" : "bg-[#b58863]"
+                  }`}
                 />
               );
               colIndex++;
@@ -201,10 +207,10 @@ const MiniChessboard = ({ gameId }: { gameId: string }) => {
                   isLight ? "bg-[#f0d9b5]" : "bg-[#b58863]"
                 }`}
               >
-                <span 
+                <span
                   className={
-                    isWhitePiece 
-                      ? "text-white drop-shadow-md scale-110" 
+                    isWhitePiece
+                      ? "text-white drop-shadow-md scale-110"
                       : "text-black drop-shadow-sm"
                   }
                 >
@@ -249,6 +255,7 @@ export default function PlayLobby() {
   const [myGames, setMyGames] = useState<GameInfo[]>([]);
   const [myGamesLoading, setMyGamesLoading] = useState(false);
   const [showMyGames, setShowMyGames] = useState(true);
+  const [myTurnCount, setMyTurnCount] = useState(0);
 
   const [stakeAmount, setStakeAmount] = useState("100");
   const [xlmBalance, setXlmBalance] = useState("0");
@@ -325,6 +332,7 @@ export default function PlayLobby() {
   const fetchMyGames = useCallback(async () => {
     if (!connectedAddress) return;
     setMyGamesLoading(true);
+
     try {
       const raw = await simRead(
         ESCROW_CONTRACT_ID,
@@ -332,7 +340,9 @@ export default function PlayLobby() {
         [new Address(connectedAddress).toScVal()],
         connectedAddress
       );
+
       const ids = normalizeIds(raw);
+
       const games = await Promise.all(
         ids.map(async (id) => {
           try {
@@ -343,6 +353,19 @@ export default function PlayLobby() {
               connectedAddress
             );
 
+            const moveCount = d.move_hash
+              ? d.move_hash.trim().split(/\s+/).length
+              : 0;
+
+            const isEvenMoves = moveCount % 2 === 0;
+            const currentPlayer = isEvenMoves ? "white" : "black";
+
+            const isMyTurn =
+              (currentPlayer === "white" &&
+                d.white?.toLowerCase() === connectedAddress.toLowerCase()) ||
+              (currentPlayer === "black" &&
+                d.black?.toLowerCase() === connectedAddress.toLowerCase());
+
             const gameInfo: GameInfo = {
               id: id.toString(),
               status: parseStatus(d.status),
@@ -350,9 +373,12 @@ export default function PlayLobby() {
               white: d.white,
               black: d.black,
               created_at: Number(d.created_at),
+              isMyTurn,
+              currentPlayer,
+              moveCount,
             };
 
-            // ── Fetch & cache board state ──────────────────────────────
+            // Cache board
             if (
               gameInfo.status === "Active" ||
               gameInfo.status === "Finished"
@@ -362,41 +388,47 @@ export default function PlayLobby() {
                   GAME_CONTRACT_ID,
                   "get_game",
                   [nativeToScVal(id, { type: "u64" })],
-                  connectedAddress || undefined
+                  connectedAddress
                 );
 
                 const fen = parseFen(gd.current_fen);
                 const moves = parseMoves(gd.moves as any[]);
 
-                console.log(`[Lobby Board Received] Game #${id}`, {
-                  gameId: id.toString(),
-                  status: gameInfo.status,
-                  fen: fen,
-                  moveCount: moves.length,
-                  raw_fen: gd.current_fen,
-                  timestamp: new Date().toISOString(),
-                });
-
                 if (fen) {
                   writeGameCache(id.toString(), fen, moves);
-                  console.log(
-                    `[Lobby] Board cached successfully for game #${id}`
-                  );
                 }
               } catch (err) {
                 console.warn(
-                  `[Lobby] Failed to fetch/cache board for game #${id}`,
+                  `[Lobby] Failed to cache board for game #${id}`,
                   err
                 );
               }
             }
+
             return gameInfo;
-          } catch {
+          } catch (err) {
+            console.error(`Failed to load game #${id}`, err);
             return null;
           }
         })
       );
-      setMyGames(games.filter(Boolean) as GameInfo[]);
+
+      // filtering + sorting
+
+      const processedGames = games
+        .filter((g): g is GameInfo => Boolean(g))
+        .sort((a, b) => {
+          if (a.isMyTurn && !b.isMyTurn) return -1;
+          if (!a.isMyTurn && b.isMyTurn) return 1;
+          return b.created_at - a.created_at;
+        });
+
+      setMyGames(processedGames);
+      setMyTurnCount(
+        processedGames.filter(
+          (g) => g.status === "Active" && g.isMyTurn === true
+        ).length
+      );
     } catch (e) {
       console.error("[fetchMyGames]", e);
     } finally {
@@ -707,34 +739,56 @@ export default function PlayLobby() {
     </span>
   );
 
-  const GameRow = ({ g }: { g: GameInfo }) => (
-    <div className="flex items-center justify-between py-2.5 border-b border-zinc-800/40 last:border-0 group">
-      <div className="flex items-center gap-3 min-w-0">
-        {/* Mini Board Preview */}
-        <MiniChessboard gameId={g.id} />
+  const GameRow = ({ g }: { g: GameInfo }) => {
+    const isMyTurnToPlay = g.isMyTurn === true && g.status == "Active";
 
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-amber-400 font-black font-mono shrink-0">
-              #{g.id}
-            </span>
-            <StatusBadge status={g.status} />
-          </div>
-          <p className="text-[10px] text-zinc-300 font-mono truncate">
-            {formatAddress(g.white)}
-          </p>
-          <p className="text-[9px] text-zinc-600">{g.stake} XLM each</p>
-        </div>
-      </div>
-
-      <button
-        onClick={() => router.push(`/play/${g.id}`)}
-        className="text-[9px] px-3 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white hover:border-amber-500/50 transition-all font-bold ml-2"
+    return (
+      <div
+        className={`flex items-center justify-between py-3 px-3 -mx-2 rounded-xl transition-all duration-200 group ${
+          isMyTurnToPlay ? " opacity-100" : " opacity-65  "
+        }`}
       >
-        View
-      </button>
-    </div>
-  );
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          {/* Mini Board Preview */}
+          <div className={isMyTurnToPlay ? "overflow-hidden" : ""}>
+            <MiniChessboard gameId={g.id} />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] text-amber-400 font-black font-mono shrink-0">
+                #{g.id}
+              </span>
+
+              <StatusBadge status={g.status} />
+            </div>
+
+            <p className="text-[10px] text-zinc-300 font-mono truncate">
+              {formatAddress(g.white)}
+            </p>
+
+            <p className="text-[9px] text-zinc-500">{g.stake} XLM</p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => router.push(`/play/${g.id}`)}
+          className={`flex items-center justify-center w-9 h-9 rounded-xl transition-all flex-shrink-0 ${
+            isMyTurnToPlay
+              ? "bg-red-500 hover:bg-red-600 text-white shadow-md shadow-red-500/50"
+              : "bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-600"
+          }`}
+          title={isMyTurnToPlay ? "Play Now" : "View Game"}
+        >
+          {isMyTurnToPlay ? (
+            <Swords size={18} className="drop-shadow-sm" />
+          ) : (
+            <ChevronRight size={18} />
+          )}
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div
@@ -1256,6 +1310,7 @@ export default function PlayLobby() {
           <div className="xl:hidden w-full mt-2 space-y-2">
             {/* My Games accordion */}
             <div className="border border-zinc-800 rounded-2xl overflow-hidden bg-zinc-900/20">
+              {/* My Games Header */}
               <button
                 onClick={() => {
                   setShowMyGames((s) => !s);
@@ -1264,21 +1319,21 @@ export default function PlayLobby() {
                 className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-zinc-800/30 transition-colors"
               >
                 <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
-                  <Users size={11} className="text-amber-400" /> My Games
-                </span>
-                <div className="flex items-center gap-2">
-                  {myGames.length > 0 && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-black">
-                      {myGames.length}
+                  <Users size={11} className="text-amber-400" />
+                  My Games
+                  {myTurnCount > 0 && (
+                    <span className="ml-1.5 px-2 py-0.5 text-[9px] font-black bg-red-500 text-white rounded-full shadow-md shadow-red-500/50 ring-1 ring-red-400/30 min-w-[18px] h-[18px] flex items-center justify-center">
+                      {myTurnCount}
                     </span>
                   )}
-                  <ChevronRight
-                    size={13}
-                    className={`text-zinc-600 transition-transform ${
-                      showMyGames ? "rotate-90" : ""
-                    }`}
-                  />
-                </div>
+                </span>
+
+                <ChevronRight
+                  size={13}
+                  className={`text-zinc-600 transition-transform ${
+                    showMyGames ? "rotate-90" : ""
+                  }`}
+                />
               </button>
               {showMyGames && (
                 <div className="border-t border-zinc-800/50 px-4 pb-3 pt-1 max-h-64 overflow-y-auto">
@@ -1449,21 +1504,21 @@ export default function PlayLobby() {
                     className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-zinc-800/30 transition-colors"
                   >
                     <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
-                      <Users size={11} className="text-amber-400" /> My Games
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {myGames.length > 0 && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-black">
-                          {myGames.length}
+                      <Users size={11} className="text-amber-400" />
+                      My Games
+                      {myTurnCount > 0 && (
+                        <span className="ml-1.5 px-2 py-0.5 text-[9px] font-black bg-red-500 text-white rounded-full shadow-md shadow-red-500/50 ring-1 ring-red-400/30 min-w-[18px] h-[18px] flex items-center justify-center">
+                          {myTurnCount}
                         </span>
                       )}
-                      <ChevronRight
-                        size={13}
-                        className={`text-zinc-600 transition-transform ${
-                          showMyGames ? "rotate-90" : ""
-                        }`}
-                      />
-                    </div>
+                    </span>
+
+                    <ChevronRight
+                      size={13}
+                      className={`text-zinc-600 transition-transform ${
+                        showMyGames ? "rotate-90" : ""
+                      }`}
+                    />
                   </button>
                   {showMyGames && (
                     <div className="border-t border-zinc-800/50 px-4 pb-3 pt-1 max-h-64 overflow-y-auto">
