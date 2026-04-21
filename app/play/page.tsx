@@ -769,9 +769,10 @@ export default function PlayLobby() {
 
     return (
       <div
-        className={`flex items-center justify-between py-3 px-3 -mx-2 rounded-xl transition-all duration-200 group ${
+        className={`flex items-center justify-between py-3 px-3 -mx-2 rounded-xl transition-all hover:cursor-pointer duration-200 group ${
           isMyTurnToPlay ? " opacity-100" : " opacity-65  "
         }`}
+        onClick={() => router.push(`/play/${g.id}`)}
       >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           {/* Mini Board Preview */}
@@ -798,7 +799,7 @@ export default function PlayLobby() {
 
         <button
           onClick={() => router.push(`/play/${g.id}`)}
-          className={`flex items-center justify-center w-4 h-4 rounded-xl transition-all flex-shrink-0 ${
+          className={`flex items-center justify-center w-4 h-4 rounded-xl transition-all shrink-0 ${
             isMyTurnToPlay
               ? "bg-red-500 hover:bg-red-600 text-white shadow-md shadow-red-500/50"
               : "bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-600"

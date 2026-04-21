@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useKingFallAuth } from "@/app/hooks/Usekingfallauth";
+import { ClockIcon, EyeIcon } from "@heroicons/react/24/solid";
+
 import {
   readCachedGame,
   writeGameCache,
@@ -1595,7 +1597,6 @@ export default function GamePage() {
     <div
       className="relative"
       style={{
-        borderRadius: "12px",
         overflow: "hidden",
         boxShadow:
           "0 0 60px -15px rgba(0,0,0,0.9),0 0 30px -8px rgba(217,119,6,0.12)",
@@ -1746,8 +1747,9 @@ export default function GamePage() {
                     <div className="text-2xl opacity-30">♛</div>
                     <div>
                       <p className="text-xs font-bold text-zinc-600">Black</p>
-                      <p className="text-[9px] text-zinc-700">
-                        Waiting to join...
+                      <p className="text-[9px] text-zinc-700 flex items-center gap-1">
+                        Waiting to join
+                        <ClockIcon className="w-3 h-3 top-[3.5px]" />
                       </p>
                     </div>
                   </div>
@@ -2008,7 +2010,7 @@ export default function GamePage() {
             )} */}
           </div>
           <div className="flex items-center gap-3">
-            {connectedAddress && (
+            {/* {connectedAddress && (
               <div className="flex items-center gap-2 px-3 py-1.5 border border-zinc-800 rounded-xl bg-zinc-900/40">
                 <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                 <span className="text-[10px] text-zinc-400">
@@ -2019,11 +2021,11 @@ export default function GamePage() {
                   {xlmBalance} XLM
                 </span>
               </div>
-            )}
+            )} */}
             {!isPlayer && (
-              <div className="px-3 py-1.5 border border-zinc-700 rounded-xl text-[9px] text-zinc-500 uppercase tracking-widest">
-                Spectating
-              </div>
+             <div className="px-3 py-1.5 border border-zinc-700 rounded-xl flex items-center justify-center">
+             <EyeIcon className="w-3 h-3 text-zinc-500" />
+           </div>
             )}
           </div>
         </header>
