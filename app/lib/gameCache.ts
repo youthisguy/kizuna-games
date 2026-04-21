@@ -1,3 +1,10 @@
+export interface GameCacheEntry {
+  fen: string;
+  moves: string[];
+  ts: number;
+  winner?: "w" | "b" | "draw";  
+}
+
 // ─── Shared FEN/move parsers ──────────────────────────────────────────────
 export function parseFen(raw: any): string {
     if (typeof raw === "string") return raw;
@@ -38,11 +45,16 @@ export function parseFen(raw: any): string {
     return readGameCache()[id] ?? null;
   }
   
-  export function writeGameCache(id: string, fen: string, moves: string[]) {
+  export function writeGameCache(
+    id: string,
+    fen: string,
+    moves: string[],
+    winner?: "w" | "b" | "draw"  
+  ) {
     if (typeof window === "undefined") return;
     try {
       const cache = readGameCache();
-      cache[id] = { fen, moves, ts: Date.now() };
+      cache[id] = { fen, moves, ts: Date.now(), ...(winner ? { winner } : {}) };
       const keys = Object.keys(cache).sort((a, b) => cache[b].ts - cache[a].ts);
       const trimmed: typeof cache = {};
       keys.slice(0, 50).forEach((k) => (trimmed[k] = cache[k]));

@@ -24,6 +24,10 @@ import {
   Trophy,
   ChevronRight,
   List,
+  PlusCircleIcon,
+  BaggageClaim,
+  BadgeDollarSign,
+  PlaySquareIcon,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useKingFallAuth } from "../hooks/Usekingfallauth";
@@ -94,43 +98,64 @@ async function sendTx(
   contractId: string,
   method: string,
   args: xdr.ScVal[],
-  onStatus: (s: {
-    type: "success" | "error" | "pending";
-    msg: string;
-    hash?: string;
-  }) => void
+  onStatus: (s: { type: "success"|"error"|"pending"; msg: string; hash?: string }) => void
 ): Promise<xdr.ScVal | null> {
-  onStatus({ type: "pending", msg: `${method}...` });
+  onStatus({ type: "pending", msg: "Preparing transaction..." });
   try {
     const account = await server.getAccount(addr);
+
     const tx = new TransactionBuilder(account, {
-      fee: "10000",
+      fee: "100",            // minimum valid fee 
       networkPassphrase,
     })
       .addOperation(new Contract(contractId).call(method, ...args))
       .setTimeout(30)
       .build();
+
     const prepared = await server.prepareTransaction(tx);
+
+ 
     const { signedTxXdr } = await kit.signTransaction(prepared.toXDR(), {
       networkPassphrase,
       address: addr,
     });
+
+ 
+    onStatus({ type: "pending", msg: "processing" });
+    const bumpRes = await fetch("/api/fee-bump", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ signedInnerXdr: signedTxXdr }),
+    });
+
+    if (!bumpRes.ok) {
+      const err = await bumpRes.json();
+      throw new Error(err.error || "Fee bump failed");
+    }
+
+    const { feeBumpXdr } = await bumpRes.json();
+
+ 
     const response = await server.sendTransaction(
-      TransactionBuilder.fromXDR(signedTxXdr, networkPassphrase)
+      TransactionBuilder.fromXDR(feeBumpXdr, networkPassphrase)
     );
+
     if (response.status === "ERROR") throw new Error("Transaction rejected");
+
     let r = await server.getTransaction(response.hash);
     while (r.status === "NOT_FOUND") {
-      await new Promise((x) => setTimeout(x, 1000));
+      await new Promise(x => setTimeout(x, 1000));
       r = await server.getTransaction(response.hash);
     }
+
     if (r.status === "SUCCESS") {
       onStatus({ type: "success", msg: "Confirmed", hash: response.hash });
       return (r as any).returnValue ?? null;
     }
+
     throw new Error("Transaction failed on-chain");
   } catch (err: any) {
-    onStatus({ type: "error", msg: err.message || `${method} failed` });
+    onStatus({ type: "error", msg: err.message || "Transaction failed" });
     return null;
   }
 }
@@ -354,11 +379,11 @@ export default function PlayLobby() {
             );
 
             const moveCount = d.move_hash
-              ? d.move_hash.trim().split(/\s+/).length
-              : 0;
+            ? d.move_hash.trim().split(/\s+/).length
+            : 0;
 
-            const isEvenMoves = moveCount % 2 === 0;
-            const currentPlayer = isEvenMoves ? "white" : "black";
+              const isWhiteTurn = moveCount % 2 === 0;
+              const currentPlayer = isWhiteTurn ? "white" : "black"; 
 
             const isMyTurn =
               (currentPlayer === "white" &&
@@ -900,7 +925,7 @@ export default function PlayLobby() {
                   {/* Create Game */}
                   <div className="border border-zinc-800 rounded-2xl p-6 space-y-5 bg-zinc-900/30 backdrop-blur">
                     <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                      <Coins size={12} className="text-amber-400" /> Create Game
+                      <PlusCircleIcon size={12} className="text-amber-400" /> Create Game
                     </h3>
                     <div className="grid grid-cols-4 gap-2">
                       {["1", "5", "10", "25"].map((v) => (
@@ -1277,9 +1302,9 @@ export default function PlayLobby() {
                   {
                     label: "Open Games",
                     value: activeGames.length || "—",
-                    icon: Swords,
+                    icon: PlaySquareIcon,
                   },
-                  { label: "Total Staked", value: totalStaked, icon: Coins },
+                  { label: "Total Staked", value: totalStaked, icon: BadgeDollarSign },
                   {
                     label: "Games Played",
                     value: allGames.length || "—",
@@ -1521,7 +1546,7 @@ export default function PlayLobby() {
                       <Users size={11} className="text-amber-400" />
                       My Games
                       {myTurnCount > 0 && (
-                        <span className="ml-1.5 px-2 py-0.5 text-[9px] font-black bg-red-500 text-white rounded-full shadow-md shadow-red-500/50 ring-1 ring-red-400/30 min-w-[18px] h-[18px] flex items-center justify-center">
+                        <span className="ml-1.5 px-2 py-0.5 text-[9px] font-black bg-red-500 text-white rounded-full shadow-md shadow-red-500/50 ring-1 ring-red-400/30 min-w-4.5 h-4.5 flex items-center justify-center">
                           {myTurnCount}
                         </span>
                       )}

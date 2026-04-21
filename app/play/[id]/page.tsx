@@ -595,37 +595,59 @@ async function sendTx(
     hash?: string;
   }) => void
 ): Promise<xdr.ScVal | null> {
-  onStatus({ type: "pending", msg: `${method}...` });
+  onStatus({ type: "pending", msg: "Preparing transaction..." });
   try {
     const account = await server.getAccount(addr);
+
     const tx = new TransactionBuilder(account, {
-      fee: "10000",
+      fee: "1000",
       networkPassphrase,
     })
       .addOperation(new Contract(contractId).call(method, ...args))
       .setTimeout(30)
       .build();
+
     const prepared = await server.prepareTransaction(tx);
+
     const { signedTxXdr } = await kit.signTransaction(prepared.toXDR(), {
       networkPassphrase,
       address: addr,
     });
+
+    onStatus({ type: "pending", msg: "processing" });
+    const bumpRes = await fetch("/api/fee-bump", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ signedInnerXdr: signedTxXdr }),
+    });
+
+    if (!bumpRes.ok) {
+      const err = await bumpRes.json();
+      throw new Error(err.error || "Fee bump failed");
+    }
+
+    const { feeBumpXdr } = await bumpRes.json();
+
     const response = await server.sendTransaction(
-      TransactionBuilder.fromXDR(signedTxXdr, networkPassphrase)
+      TransactionBuilder.fromXDR(feeBumpXdr, networkPassphrase)
     );
-    if (response.status === "ERROR") throw new Error("Rejected");
+
+    if (response.status === "ERROR") throw new Error("Transaction rejected");
+
     let r = await server.getTransaction(response.hash);
     while (r.status === "NOT_FOUND") {
       await new Promise((x) => setTimeout(x, 1000));
       r = await server.getTransaction(response.hash);
     }
+
     if (r.status === "SUCCESS") {
       onStatus({ type: "success", msg: "Confirmed", hash: response.hash });
       return (r as any).returnValue ?? null;
     }
-    throw new Error("Failed");
+
+    throw new Error("Transaction failed on-chain");
   } catch (err: any) {
-    onStatus({ type: "error", msg: err.message || `${method} failed` });
+    onStatus({ type: "error", msg: err.message || "Transaction failed" });
     return null;
   }
 }
@@ -2071,7 +2093,7 @@ export default function GamePage() {
               );
             })()}
             {/* Result banner */}
-            {(escrowStatus === "Finished" || escrowStatus === "Drawn") &&
+            {/* {(escrowStatus === "Finished" || escrowStatus === "Drawn") &&
               winner && (
                 <div
                   className={`w-full max-w-120 flex items-center justify-between px-4 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest ${
@@ -2097,7 +2119,7 @@ export default function GamePage() {
                       : "✗"}
                   </span>
                 </div>
-              )}
+              )} */}
             <div className="relative">
               {renderBoard(
                 escrowStatus === "Active" &&
@@ -2455,7 +2477,7 @@ export default function GamePage() {
         </div>
       </div>
 
-      <AnimatePresence>
+      {/* <AnimatePresence>
         {winner && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -2497,11 +2519,9 @@ export default function GamePage() {
                 </h2>
                 <p className="text-zinc-500 text-sm mt-2">
                   {winner === "draw"
-                    ? "Stakes returned — confirm transaction in your wallet"
+                    ? "Stakes returned"
                     : winner === playerColor
-                    ? `${stroopsToXlm(
-                        (potSize * 985n) / 1000n
-                      )} XLM — confirm transaction in your wallet to receive`
+                    ? ``
                     : "Better luck next time"}
                 </p>
                 {txStatus?.hash && (
@@ -2536,7 +2556,7 @@ export default function GamePage() {
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence> */}
 
       <AnimatePresence>
         {txStatus && (
