@@ -624,8 +624,16 @@ async function sendTx(
     });
 
     if (!bumpRes.ok) {
-      const err = await bumpRes.json();
-      throw new Error(err.error || "Fee bump failed");
+      const errText = await bumpRes.text();
+      console.error("[fee-bump] response error:", bumpRes.status, errText);
+      throw new Error(`Fee bump failed (${bumpRes.status}): ${errText}`);
+    }
+    
+    const bumpJson = await bumpRes.json();
+    console.log("[fee-bump] response:", bumpJson);
+    
+    if (!bumpJson.feeBumpXdr) {
+      throw new Error("Fee bump returned no XDR: " + JSON.stringify(bumpJson));
     }
 
     const { feeBumpXdr } = await bumpRes.json();
@@ -1368,12 +1376,25 @@ export default function GamePage() {
   const handleJoinGame = async () => {
     if (!connectedAddress || !walletsKit || !escrowId || !escrowData) return;
     setJoinLoading(true);
+  
+    let joinSucceeded = false;
+  
     const joined = await escrowTx("join_game", [
       nativeToScVal(escrowId, { type: "u64" }),
       new Address(connectedAddress).toScVal(),
     ]);
-    if (joined !== null) {
-      // Create game contract record
+
+    const escrowAfter = await simRead(
+      ESCROW_CONTRACT_ID,
+      "get_game",
+      [nativeToScVal(escrowId, { type: "u64" })],
+      connectedAddress
+    ).catch(() => null);
+  
+    const newStatus = escrowAfter ? parseStatus(escrowAfter.status) : null;
+    joinSucceeded = newStatus === "Active";
+  
+    if (joinSucceeded) {
       const gcResult = await sendTx(
         connectedAddress,
         walletsKit,
@@ -1393,6 +1414,7 @@ export default function GamePage() {
       setPlayerColor("b");
       await loadGameState();
     }
+  
     setJoinLoading(false);
   };
 
