@@ -624,9 +624,8 @@ async function sendTx(
     });
 
     if (!bumpRes.ok) {
-      const errText = await bumpRes.text();
-      console.error("[fee-bump] response error:", bumpRes.status, errText);
-      throw new Error(`Fee bump failed (${bumpRes.status}): ${errText}`);
+      const err = await bumpRes.json();
+      throw new Error(err.error || "Fee bump failed");
     }
     
     const bumpJson = await bumpRes.json();
@@ -636,10 +635,8 @@ async function sendTx(
       throw new Error("Fee bump returned no XDR: " + JSON.stringify(bumpJson));
     }
 
-    const { feeBumpXdr } = await bumpRes.json();
-
     const response = await server.sendTransaction(
-      TransactionBuilder.fromXDR(feeBumpXdr, networkPassphrase)
+      TransactionBuilder.fromXDR(bumpJson.feeBumpXdr, networkPassphrase)
     );
 
     if (response.status === "ERROR") throw new Error("Transaction rejected");
@@ -1373,49 +1370,108 @@ export default function GamePage() {
     return r;
   };
 
+  async function sendTxDirect(
+    addr: string,
+    kit: any,
+    contractId: string,
+    method: string,
+    args: xdr.ScVal[],
+    onStatus: (s: { type: "success" | "error" | "pending"; msg: string; hash?: string }) => void
+  ): Promise<xdr.ScVal | null> {
+    onStatus({ type: "pending", msg: "Preparing transaction..." });
+    try {
+      const account = await server.getAccount(addr);
+  
+      const tx = new TransactionBuilder(account, {
+        fee: "1000000", 
+        networkPassphrase,
+      })
+        .addOperation(new Contract(contractId).call(method, ...args))
+        .setTimeout(30)
+        .build();
+  
+      const prepared = await server.prepareTransaction(tx);
+  
+      const { signedTxXdr } = await kit.signTransaction(prepared.toXDR(), {
+        networkPassphrase,
+        address: addr,
+      });
+  
+      onStatus({ type: "pending", msg: "Submitting..." });
+  
+      const response = await server.sendTransaction(
+        TransactionBuilder.fromXDR(signedTxXdr, networkPassphrase)
+      );
+  
+      console.log("[sendTxDirect] submit response:", response.status, response.hash);
+  
+      if (response.status === "ERROR") throw new Error("Transaction rejected");
+  
+      let r = await server.getTransaction(response.hash);
+      while (r.status === "NOT_FOUND") {
+        await new Promise((x) => setTimeout(x, 1000));
+        r = await server.getTransaction(response.hash);
+      }
+  
+      console.log("[sendTxDirect] final status:", r.status);
+  
+      if (r.status === "SUCCESS") {
+        onStatus({ type: "success", msg: "Confirmed", hash: response.hash });
+        return (r as any).returnValue ?? null;
+      }
+  
+      console.error("[sendTxDirect] failed result:", JSON.stringify(r));
+      throw new Error("Transaction failed on-chain");
+    } catch (err: any) {
+      onStatus({ type: "error", msg: err.message || "Transaction failed" });
+      return null;
+    }
+  }
+
   const handleJoinGame = async () => {
     if (!connectedAddress || !walletsKit || !escrowId || !escrowData) return;
     setJoinLoading(true);
   
-    let joinSucceeded = false;
+    try {
+      console.log("[joinGame] Starting join for escrowId:", escrowId.toString());
   
-    const joined = await escrowTx("join_game", [
-      nativeToScVal(escrowId, { type: "u64" }),
-      new Address(connectedAddress).toScVal(),
-    ]);
-
-    const escrowAfter = await simRead(
-      ESCROW_CONTRACT_ID,
-      "get_game",
-      [nativeToScVal(escrowId, { type: "u64" })],
-      connectedAddress
-    ).catch(() => null);
-  
-    const newStatus = escrowAfter ? parseStatus(escrowAfter.status) : null;
-    joinSucceeded = newStatus === "Active";
-  
-    if (joinSucceeded) {
-      const gcResult = await sendTx(
+      const joined = await sendTxDirect(
         connectedAddress,
         walletsKit,
-        GAME_CONTRACT_ID,
-        "create_game",
+        ESCROW_CONTRACT_ID,
+        "join_game",
         [
-          new Address(escrowData.white).toScVal(),
-          new Address(connectedAddress).toScVal(),
           nativeToScVal(escrowId, { type: "u64" }),
-          nativeToScVal(0n, { type: "u64" }),
+          new Address(connectedAddress).toScVal(),
         ],
-        (s) => console.log("[create_game]", s)
+        setTxStatus
       );
-      if (gcResult) {
-        setGameContractId(scValToNative(gcResult) as bigint);
-      }
-      setPlayerColor("b");
-      await loadGameState();
-    }
   
-    setJoinLoading(false);
+      console.log("[joinGame] join_game returned:", joined);
+  
+      const escrowAfter = await simRead(
+        ESCROW_CONTRACT_ID,
+        "get_game",
+        [nativeToScVal(escrowId, { type: "u64" })],
+        connectedAddress
+      ).catch(() => null);
+  
+      const newStatus = parseStatus(escrowAfter?.status);
+      console.log("[joinGame] status after join:", newStatus);
+  
+      if (newStatus === "Active") {
+        setPlayerColor("b");
+        await findAndSetGameContract(connectedAddress);
+        await loadGameState();
+      } else {
+        setTxStatus({ type: "error", msg: "Join failed — game not active after tx" });
+      }
+    } catch (err: any) {
+      console.error("[joinGame] error:", err);
+      setTxStatus({ type: "error", msg: err.message || "Join failed" });
+    } finally {
+      setJoinLoading(false);
+    }
   };
 
   const handleGameOver = async (
