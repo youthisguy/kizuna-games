@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Users,
@@ -23,6 +23,7 @@ import {
   scValToNative,
   TransactionBuilder,
   xdr,
+  nativeToScVal,
 } from "@stellar/stellar-sdk";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
@@ -37,6 +38,8 @@ interface Metrics {
   gamesThisWeek: number;
   outcomeCounts: { WhiteWins: number; BlackWins: number; Draw: number };
   totalStaked: number;
+  dailyGames: any[];
+
   topUsers: {
     username: string;
     wallet_address: string;
@@ -44,7 +47,7 @@ interface Metrics {
     total_games: number;
     total_wins: number;
   }[];
-  dailyGames: { finished_at: string }[];
+
   newUserData: { created_at: string }[];
 }
 
@@ -128,20 +131,28 @@ function CodeActivityLog({ metrics }: { metrics: Metrics | null }) {
   );
 }
 
-function groupByDay(
-  data: { finished_at?: string; created_at?: string }[],
-  field: "finished_at" | "created_at"
-) {
+function groupByDay(data: any[], field: string) {
   const counts: Record<string, number> = {};
-  data?.forEach((d) => {
-    const day = d[field]?.slice(0, 10);
-    if (day) counts[day] = (counts[day] || 0) + 1;
+  const now = new Date();
+
+  data.forEach((d) => {
+    const val = d[field];
+    if (!val) return;
+    const day = val.split("T")[0];
+    counts[day] = (counts[day] || 0) + 1;
   });
-  return Array.from({ length: 14 }, (_, i) => {
-    const d = new Date(Date.now() - (13 - i) * 86400000);
-    const key = d.toISOString().slice(0, 10);
-    return { date: key, count: counts[key] || 0 };
-  });
+
+  const result = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(now.getDate() - i);
+    const key = d.toISOString().split("T")[0];
+    result.push({
+      date: key,
+      count: counts[key] || 0,
+    });
+  }
+  return result;
 }
 
 function MiniBarChart({
@@ -153,22 +164,22 @@ function MiniBarChart({
 }) {
   const max = Math.max(...data.map((d) => d.count), 1);
   return (
-    <div className="flex items-end gap-1 h-16 mt-3">
+    <div className="flex items-end gap-0.5 h-16 mt-3">
       {data.map((d) => (
         <div
           key={d.date}
-          className="flex-1 flex flex-col items-center gap-1 group relative"
+          className="flex-1 flex flex-col items-center group relative"
         >
           <div
-            className="w-full rounded-sm transition-all duration-500"
+            className="w-full rounded-t-[1px] transition-all duration-500"
             style={{
-              height: `${Math.max(4, (d.count / max) * 56)}px`,
+              height: `${Math.max(2, (d.count / max) * 56)}px`,
               background: color,
-              opacity: d.count === 0 ? 0.2 : 1,
+              opacity: d.count === 0 ? 0.1 : 1,
             }}
           />
-          <div className="absolute bottom-full mb-1 hidden group-hover:block bg-zinc-800 text-zinc-200 text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap z-10">
-            {d.date.slice(5)}: {d.count}
+          <div className="absolute bottom-full mb-1 hidden group-hover:block bg-zinc-800 text-zinc-200 text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap z-50 shadow-xl border border-zinc-700">
+            {d.date}: {d.count}
           </div>
         </div>
       ))}
@@ -187,6 +198,17 @@ export default function MetricsDashboard() {
     totalGamesPlayed: 0,
     loading: true,
   });
+
+  const normalizeIds = (raw: any): bigint[] => {
+    if (!Array.isArray(raw)) return [];
+    return raw.map((x: any) => {
+      if (typeof x === "bigint") return x;
+      if (typeof x === "number") return BigInt(x);
+      if (typeof x === "object" && x !== null)
+        return BigInt(Object.values(x)[0] as any);
+      return BigInt(String(x));
+    });
+  };
 
   const fetchMetrics = async () => {
     setLoading(true);
@@ -242,15 +264,79 @@ export default function MetricsDashboard() {
     }
   }, []);
 
+  const fetchOnChainTraffic = useCallback(async () => {
+    console.log("DEBUG: Starting On-Chain Traffic Crawl...");
+    try {
+      const allIdsRaw = await simRead(GAME_CONTRACT_ID, "get_all_games", []);
+      const allIds = normalizeIds(allIdsRaw);
+      console.log(`DEBUG: Found ${allIds.length} total games on-chain.`);
+
+      const recentIds = allIds.slice(-100);
+      console.log(`DEBUG: Analyzing the last ${recentIds.length} games...`);
+
+      const gameDetails = await Promise.all(
+        recentIds.map(async (id) => {
+          try {
+            const d = await simRead(ESCROW_CONTRACT_ID, "get_game", [
+              nativeToScVal(id, { type: "u64" }),
+            ]);
+
+            const rawTime = Number(d.created_at);
+
+            const timestamp = rawTime < 10000000000 ? rawTime * 1000 : rawTime;
+
+            return {
+              finished_at: new Date(timestamp).toISOString(),
+            };
+          } catch (e) {
+            return null;
+          }
+        })
+      );
+
+      const validGames = gameDetails.filter(Boolean) as {
+        finished_at: string;
+      }[];
+      console.log(
+        `DEBUG: Successfully parsed ${validGames.length} valid timestamps.`
+      );
+
+      setMetrics((prev) => {
+        if (!prev) {
+          return {
+            dau: 0,
+            wau: 0,
+            mau: 0,
+            totalUsers: 0,
+            totalGames: validGames.length,
+            gamesThisWeek: 0,
+            outcomeCounts: { WhiteWins: 0, BlackWins: 0, Draw: 0 },
+            totalStaked: 0,
+            topUsers: [],
+            dailyGames: [],
+            newUserData: [],
+          };
+        }
+
+        return { ...prev, dailyGames: validGames };
+      });
+    } catch (err) {
+      console.error("CRITICAL: Failed to crawl on-chain traffic:", err);
+    }
+  }, []);
+
   useEffect(() => {
-    fetchMetrics();
-    fetchOnChainMetrics();
-    const interval = setInterval(() => {
+    const runAllSyncs = () => {
       fetchMetrics();
       fetchOnChainMetrics();
-    }, 60000);
+      fetchOnChainTraffic();
+    };
+
+    runAllSyncs();
+    const interval = setInterval(runAllSyncs, 60000);
+
     return () => clearInterval(interval);
-  }, [fetchOnChainMetrics]);
+  }, [fetchOnChainMetrics, fetchOnChainTraffic]);
 
   useEffect(() => {
     fetchMetrics();
@@ -258,12 +344,17 @@ export default function MetricsDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  const dailyGameData = metrics
-    ? groupByDay(metrics.dailyGames, "finished_at")
-    : [];
-  const dailyUserData = metrics
-    ? groupByDay(metrics.newUserData, "created_at")
-    : [];
+  const dailyGameData = useMemo(() => {
+    return metrics?.dailyGames
+      ? groupByDay(metrics.dailyGames, "finished_at")
+      : [];
+  }, [metrics?.dailyGames]);
+
+  const dailyUserData = useMemo(() => {
+    return metrics?.newUserData
+      ? groupByDay(metrics.newUserData, "created_at")
+      : [];
+  }, [metrics?.newUserData]);
   const totalOutcomes = metrics
     ? metrics.outcomeCounts.WhiteWins +
       metrics.outcomeCounts.BlackWins +
@@ -290,9 +381,9 @@ export default function MetricsDashboard() {
               <ArrowLeft size={13} /> Back
             </button>
             <div>
-              <h1 className="text-xl font-black text-white tracking-wider">
+              {/* <h1 className="text-xl font-black text-white tracking-wider">
                 ♚ KingFall <span className="text-amber-400">Metrics</span>
-              </h1>
+              </h1> */}
               <p className="text-[10px] text-zinc-600 mt-0.5">
                 {lastUpdated
                   ? `LAST_SYNC: ${lastUpdated.toLocaleTimeString()}`
@@ -417,25 +508,32 @@ export default function MetricsDashboard() {
 
             {/* Charts Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Game Traffic Chart */}
               <div className="border border-zinc-800 rounded-2xl p-5 bg-zinc-900/30">
-                <h3 className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">
-                  Game Traffic (14d)
-                </h3>
+                <div className="flex justify-between items-center mb-1">
+                  <h3 className="text-[10px] text-zinc-500 uppercase tracking-widest">
+                    Game Traffic (30D)
+                  </h3>
+                </div>
                 <MiniBarChart data={dailyGameData} color="#f59e0b" />
                 <div className="flex justify-between mt-2 font-mono text-[8px] text-zinc-700">
-                  <span>{dailyGameData[0]?.date.slice(5)}</span>
-                  <span>{dailyGameData[13]?.date.slice(5)}</span>
+     
+                  <span>{dailyGameData[0]?.date}</span>
+                  <span>{dailyGameData[29]?.date}</span>
                 </div>
               </div>
 
+              {/* User Growth Chart */}
               <div className="border border-zinc-800 rounded-2xl p-5 bg-zinc-900/30">
-                <h3 className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">
-                  User Growth (14d)
-                </h3>
+                <div className="flex justify-between items-center mb-1">
+                  <h3 className="text-[10px] text-zinc-500 uppercase tracking-widest">
+                    User Growth (30D)
+                  </h3>
+                </div>
                 <MiniBarChart data={dailyUserData} color="#6366f1" />
                 <div className="flex justify-between mt-2 font-mono text-[8px] text-zinc-700">
-                  <span>{dailyUserData[0]?.date.slice(5)}</span>
-                  <span>{dailyUserData[13]?.date.slice(5)}</span>
+                  <span>{dailyUserData[0]?.date}</span>
+                  <span>{dailyUserData[29]?.date}</span>
                 </div>
               </div>
             </div>
