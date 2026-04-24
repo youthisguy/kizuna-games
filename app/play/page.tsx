@@ -1041,9 +1041,9 @@ export default function PlayLobby() {
                         <div
                           className={`px-4 py-2.5 flex items-center justify-between ${
                             lookupResult.status === "Waiting"
-                              ? "bg-emerald-500/[0.06]"
+                              ? "bg-emerald-500/6"
                               : lookupResult.status === "Active"
-                              ? "bg-amber-500/[0.06]"
+                              ? "bg-amber-500/6"
                               : "bg-zinc-900/60"
                           }`}
                         >
