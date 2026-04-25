@@ -14,6 +14,7 @@ import {
   Terminal,
   ShieldCheck,
   Swords,
+  ActivitySquareIcon,
 } from "lucide-react";
 import {
   Address,
@@ -25,6 +26,9 @@ import {
   xdr,
   nativeToScVal,
 } from "@stellar/stellar-sdk";
+import { PlayCircleIcon } from "@heroicons/react/24/outline";
+import { IoBagAddOutline } from "react-icons/io5";
+import { RiTriangularFlagFill } from "react-icons/ri";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -51,7 +55,7 @@ interface Metrics {
   newUserData: { created_at: string }[];
 }
 
-// ─── Config ───────────────────────────────────────────────────────────────────
+// --- Config ---
 const ESCROW_CONTRACT_ID =
   "CCSDLJLDIJSAOKFLX2QWCOVLENA4FFN2EMSGJRFKTIBYY4UUA2HKDGBN";
 const GAME_CONTRACT_ID =
@@ -387,7 +391,7 @@ export default function MetricsDashboard() {
               <p className="text-[10px] text-zinc-600 mt-0.5">
                 {lastUpdated
                   ? `LAST_SYNC: ${lastUpdated.toLocaleTimeString()}`
-                  : "INITIALIZING..."}
+                  : "INITIALIZING"}
               </p>
             </div>
           </div>
@@ -405,7 +409,7 @@ export default function MetricsDashboard() {
           <div className="flex flex-col items-center justify-center py-40 gap-4">
             <Terminal size={32} className="text-amber-500/50 animate-pulse" />
             <p className="text-[10px] font-mono text-zinc-600 animate-pulse tracking-widest">
-              ESTABLISHING_ENCRYPTED_LINK...
+              ESTABLISHING_LINK
             </p>
           </div>
         ) : (
@@ -420,21 +424,21 @@ export default function MetricsDashboard() {
                   label: "DAU",
                   value: metrics?.dau ?? 0,
                   sub: "Today",
-                  icon: Activity,
+                  icon: RiTriangularFlagFill,
                   color: "#f59e0b",
                 },
                 {
                   label: "WAU",
                   value: metrics?.wau ?? 0,
                   sub: "Weekly",
-                  icon: TrendingUp,
+                  icon: RiTriangularFlagFill,
                   color: "#10b981",
                 },
                 {
                   label: "MAU",
                   value: metrics?.mau ?? 0,
                   sub: "Monthly",
-                  icon: Users,
+                  icon: RiTriangularFlagFill,
                   color: "#6366f1",
                 },
                 {
@@ -484,7 +488,7 @@ export default function MetricsDashboard() {
                   <span className="text-[10px] text-zinc-500 uppercase tracking-widest">
                     Open Games
                   </span>
-                  <Swords size={14} className="text-emerald-500" />
+                  <PlayCircleIcon  className="text-emerald-500 w-4 h-4" />
                 </div>
                 <p className="text-2xl font-black text-white">
                   {onChainStats.loading ? "..." : onChainStats.openGames}
@@ -497,7 +501,7 @@ export default function MetricsDashboard() {
                   <span className="text-[10px] text-amber-500/60 uppercase tracking-widest">
                     Total Staked
                   </span>
-                  <Coins size={14} className="text-amber-500" />
+                  <IoBagAddOutline size={14} className="text-amber-500" />
                 </div>
                 <p className="text-2xl font-black text-amber-400">
                   {onChainStats.loading ? "0.00" : onChainStats.totalStaked}

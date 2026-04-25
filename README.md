@@ -45,10 +45,17 @@ KingFall is a P2P chess platform built on Stellar/Soroban. Two players stake equ
 │   ├── kingfall-game/      # Move history, FEN state, game records
 │   └── kingfall-payout/    # Fee treasury, leaderboard, season prizes
 └── app/                    # Next.js 14 frontend
-    └── play/
-        ├── page.tsx        # Lobby — create/join/browse games
-        └── [id]/
-            └── page.tsx    # Game board — live play, move history
+    ├── play/
+    │   ├── page.tsx        # Lobby — create/join/browse games
+    │   └── [id]/
+    │       └── page.tsx    # Game board — live play, move history
+    ├── profile/[userId]/
+    │   └── page.tsx        # Player profile — ELO, stats, game history
+    ├── metrics/
+    │   └── page.tsx        # Live metrics dashboard — DAU, retention, transactions
+    └── api/
+        └── fee-bump/
+            └── route.ts    # Fee sponsorship — gasless tx for users
 ```
  
 ### Contract Flow
@@ -126,14 +133,137 @@ KingFall is a P2P chess platform built on Stellar/Soroban. Two players stake equ
  
 ## Chess Rules Implemented
  
-- Full legal move generation with check filtering (no move that leaves own king in check)
-- Check detection and red king highlight
+- Full legal move generation with check filtering
 - Checkmate detection → automatic `finish_game`
 - Stalemate detection → automatic draw
+- Castling (kingside + queenside)
+- En passant capture
 - Pawn promotion (auto-queens)
 - Board flips for black player
-- Last move highlighted (origin + destination squares) for both players
+- Last move highlighted for both players
 
+---
+
+## Metrics Dashboard
+ 
+> **[Live Metrics → kingfall-self.vercel.app/metrics](https://kingfall-self.vercel.app/metrics)**
+ 
+The `/metrics` page fetches live data directly from Supabase DB and displays:
+ 
+- **DAU (Daily Active Users)** — users active in last 24h, 7d, 30d
+- **Total Transactions** — all `commit_move` + `finish_game` calls tracked via `game_records`
+- **Retention** — % of users who returned after their first game
+- **Games played** — total completed games, win/draw/loss breakdown
+- **Top players** — ELO leaderboard with XLM won
+- **Total Staked** — total XLM staked accross all games
+ 
+---
+
+## Monitoring
+ 
+> **Vercel Analytics** — Analytics tab
+ 
+KingFall uses three monitoring layers:
+ 
+**1. Vercel Analytics (Frontend)**
+- Page views, unique visitors, Web Vitals (LCP, FID, CLS)
+- Geographic distribution of users
+- Error tracking via Vercel logs
+**2. Supabase Dashboard (Backend)**
+- Edge Function invocation counts and error rates
+- Database query performance
+- Storage usage
+**3. Stellar Expert (Onchain)**
+- Contract transaction history: [Escrow](https://stellar.expert/explorer/testnet/contract/CCSDLJLDIJSAOKFLX2QWCOVLENA4FFN2EMSGJRFKTIBYY4UUA2HKDGBN)
+- Real-time fee and transaction monitoring
+
+---
+
+## Security Checklist
+ 
+| # | Check | Status |
+|---|---|---|
+| 1 | Smart contract auth — all state-changing functions require `caller.require_auth()` | ✅ |
+| 2 | Stake validation — `join_game` verifies exact stake match before locking | ✅ |
+| 3 | Player-only actions — `commit_move` and `finish_game` reject non-participants | ✅ |
+| 4 | Resign guard — resigning player cannot declare themselves the winner | ✅ |
+| 5 | Duplicate game prevention — `game_records` table deduplicated by `escrow_game_id` | ✅ |
+| 6 | Sponsor key isolation — `SPONSOR_SECRET_KEY` is server-only, never in client bundle | ✅ |
+| 7 | Fee bump rate limiting — `/api/fee-bump` limits 10 sponsored txs per address per hour | ✅ |
+| 8 | Input validation — all Supabase edge functions validate wallet address format | ✅ |
+| 9 | No admin key on escrow — payout logic is fully autonomous, no privileged withdrawal function | ✅ |
+| 10 | XSS protection — Next.js built-in sanitization, no dangerouslySetInnerHTML | ✅ |
+| 11 | Environment variables — all secrets in Vercel env, not committed to repo | ✅ |
+| 12 | Open source contracts — all three Soroban contracts publicly auditable on GitHub | ✅ |
+ 
+---
+
+## Advanced Feature — Fee Sponsorship (Gasless Transactions)
+ 
+KingFall implements **fee bump transactions** so users pay zero XLM in transaction fees. Every game action — create, join, commit move, finish — is sponsored by the KingFall protocol account.
+ 
+**How it works:**
+ 
+1. User's wallet signs the inner Soroban transaction (with fee: 100 stroops minimum)
+2. Signed XDR is sent to `/api/fee-bump` (server-side Next.js route)
+3. Server wraps it in a `FeeBumpTransaction` signed by the sponsor keypair
+4. Fee bump tx is submitted — sponsor account pays the actual network fee
+5. User's wallet balance is unchanged by fees
+**Implementation:**
+- Route: `app/api/fee-bump/route.ts`
+- Sponsor account: funded separately, monitored for balance
+- Rate limit: 10 sponsored transactions per wallet address per hour
+- Fallback: if sponsor balance < 1 XLM, endpoint returns 503 and client submits directly
+```typescript
+// Server builds and signs the fee bump
+const feeBumpTx = TransactionBuilder.buildFeeBumpTransaction(
+  sponsorKeypair,   // sponsor pays
+  MAX_FEE,          // max 100,000 stroops per tx
+  innerTx,          // user's signed inner tx
+  networkPassphrase
+);
+feeBumpTx.sign(sponsorKeypair);
+```
+ 
+**Proof of implementation:** `app/api/fee-bump/route.ts` in the GitHub repository.
+ 
+---
+
+## Data Indexing
+ 
+KingFall uses **Supabase as a real-time data index** over Stellar onchain events.
+ 
+**Indexed tables:**
+ 
+| Table | What it indexes | Updated by |
+|---|---|---|
+| `users` | ELO, financials, streaks per wallet | `game-result` edge function after every `finish_game` |
+| `game_records` | Full game history — outcome, moves, payout, tx hash | `game-result` edge function |
+| `achievements` | Unlocked badges per wallet | `game-result` edge function |
+ 
+**How it works:**
+- After `finish_game` confirms onchain, the frontend calls `/functions/v1/game-result`
+- Edge function updates both player profiles atomically (ELO, P&L, streak)
+- Inserts a `game_records` row with the escrow game ID, tx hash, outcome, stake, payout
+**Query endpoint:**
+```
+POST https://[PROJECT].supabase.co/functions/v1/leaderboard
+Body: { "sort_by": "elo_rating", "limit": 50 }
+```
+ 
+**Metrics endpoint (public):**
+```
+GET https://kingfall-self.vercel.app/metrics
+```
+ 
+---
+
+## Community Contribution
+ 
+> **[X post about KingFall →](https://x.com/youthisman)**
+ 
+Posted to the Stellar Developer Discord `#build` channel and Twitter/X announcing the MVP launch, demo video, and inviting testnet users.
+ 
 ---
  
 ## Getting Started
@@ -252,7 +382,9 @@ stellar contract invoke --id $GAME_ID --source my-account --network testnet \
 | Frontend | Next.js 14, TypeScript |
 | Styling | Tailwind CSS |
 | Wallet | Freighter / StellarWalletsKit |
+| Backend | Supabase (Postgres + Edge Functions) |
 | Deployment | Vercel |
+| Monitoring | Vercel Analytics + Supabase Dashboard |
  
 ---
 
