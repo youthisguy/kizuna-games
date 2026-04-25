@@ -170,12 +170,12 @@ KingFall uses three monitoring layers:
 
 ![Vercel Analytics](screenshots/vercel-analytics.png)
 
-**2. Metrics Dashboard (Backend)**
+**2. Supabase Dashboard (Backend)**
 - Edge Function invocation counts and error rates
 - Database query performance
 - Storage usage
 
-![Metrics Dashboard](screenshots/metrics-dashboard.png)
+![Supabase Analytics](screenshots/supabase-analytics.png)
 
 **3. Stellar Expert (Onchain)**
 - Contract transaction history: [Escrow](https://stellar.expert/explorer/testnet/contract/CCSDLJLDIJSAOKFLX2QWCOVLENA4FFN2EMSGJRFKTIBYY4UUA2HKDGBN)
@@ -267,7 +267,7 @@ GET https://kingfall-self.vercel.app/metrics
 
 ## Community Contribution
 
-> **[KingFall launch post on X/Twitter →]( )**
+> **[KingFall launch post on X/Twitter →](https://x.com/youthisman/status/2048045759912698034)**
 
 Posted to the Stellar Developer Discord `#build` channel and Twitter/X announcing the MVP launch, demo video, and inviting testnet users.
 
@@ -446,7 +446,7 @@ The following wallets have interacted with the KingFall contracts on Stellar Tes
 | 3 | `GCJ3BEALSI2QYJNWSZ2OGAEZ77FMYFXHJ6QJWHT6SLXJ5AHCSGQZ5SLV` | Tester |
 | 4 | `GADHOONGFGODLILJJYGMAB3BPD24TGYK7SUTWY4DPIW4VGBOBXJG6UBL` | Tester |
 | 5 | `GASEAJFVTFWO2UULVQQJT543WB65PVI7MQGTV446R7A36GUTLLJM53LE` | Tester |
-| 6 | `REPLACE_WITH_WALLET_FROM_FORM` | Tester |
+| 6 | `GBER34CAV5LQBLCX2LGET3PPXO3M7KYPL2TETTWOONISRJIQNG7WQL6X` | Tester |
 | 7 | `GBHBKMSI74WJLSXWYM5NYXLB2W5BHR3E76LWXDJSN6PAQJTVW4CCBJ4F` | Tester |
 | 8 | `GBJVVF2RLCRHP5PXYJ6IIZFLLLXEBSAYVYJLKXHZZEKL76JNPVXPSBWZ` | Tester |
 | 9 | `GBK6TV6R2A2WJRBV3PDMFGN45CUSWYGEJIP6OXQO4S4FT6RETXTHMLHG` | Tester |
