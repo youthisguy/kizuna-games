@@ -53,8 +53,8 @@ export const navItems = [
     ),
   },
   {
-    label: "Puzzles",
-    href: "/puzzles",
+    label: "Rewards",
+    href: "/rewards",
     comingSoon: true,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" xmlns="http://www.w3.org/2000/svg">
@@ -88,7 +88,7 @@ export default function RootLayout({
                     className="object-contain"
                   />
                   <h1 className="kingfall-font text-2xl font-bold tracking-[0.2em] uppercase text-white">
-                    <span>King</span><span>Fall</span>
+                    <span>KIZUNA</span> 
                   </h1>
                 </div>
               </header>
