@@ -339,7 +339,7 @@ export default function PlayLobby() {
   useEffect(() => {
     if (!mounted) return;
     const joinParam = new URLSearchParams(window.location.search).get("join");
-    if (joinParam) router.replace(`/play/${joinParam}`);
+    if (joinParam) router.replace(`/chess/${joinParam}`);
   }, [mounted, router]);
 
   const loadBalance = useCallback(async () => {
@@ -523,7 +523,7 @@ export default function PlayLobby() {
       refreshUser();
       fetchMyGames();
       fetchActiveGames();
-      router.push(`/play/${id.toString()}`);
+      router.push(`/chess/${id.toString()}`);
     }
   };
 
@@ -570,7 +570,7 @@ export default function PlayLobby() {
     setLoading(false);
     // Refresh sidebar profile game count
     refreshUser?.();
-    router.push(`/play/${game.id}`);
+    router.push(`/chess/${game.id}`);
   };
 
   // ── Fetch sidebar games ───────────────────────────────────────────────────
@@ -772,7 +772,7 @@ export default function PlayLobby() {
         className={`flex items-center justify-between py-3 px-3 -mx-2 rounded-xl transition-all hover:cursor-pointer duration-200 group ${
           isMyTurnToPlay ? " opacity-100" : " opacity-65  "
         }`}
-        onClick={() => router.push(`/play/${g.id}`)}
+        onClick={() => router.push(`/chess/${g.id}`)}
       >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           {/* Mini Board Preview */}
@@ -798,7 +798,7 @@ export default function PlayLobby() {
         </div>
 
         <button
-          onClick={() => router.push(`/play/${g.id}`)}
+          onClick={() => router.push(`/chess/${g.id}`)}
           className={`flex items-center justify-center w-4 h-4 rounded-xl transition-all shrink-0 ${
             isMyTurnToPlay
               ? "bg-red-500 hover:bg-red-600 text-white shadow-md shadow-red-500/50"
@@ -1073,7 +1073,7 @@ export default function PlayLobby() {
                         <div className="px-4 pb-4 flex gap-2">
                           <button
                             onClick={() =>
-                              router.push(`/play/${lookupResult!.id}`)
+                              router.push(`/chess/${lookupResult!.id}`)
                             }
                             className="flex-1 py-2.5 rounded-xl font-black text-xs tracking-wider uppercase transition-all bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center gap-2"
                           >

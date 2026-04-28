@@ -1314,6 +1314,8 @@ function SpotlightCard({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function HomePage() {
   const router = useRouter();
+  const [showNotifications, setShowNotifications] = useState(false);
+
   const go = useCallback(
     (href: string) => {
       if (href !== "#") router.push(href);
@@ -1323,6 +1325,9 @@ export default function HomePage() {
 
   return (
     <div
+      onClick={() => {
+        setShowNotifications(!showNotifications);
+      }}
       style={{
         minHeight: "100vh",
         background: "#0d0e12",
@@ -1350,7 +1355,7 @@ export default function HomePage() {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}></div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <button
+          {/* <button
             style={{
               background: "none",
               border: "none",
@@ -1365,36 +1370,125 @@ export default function HomePage() {
             }}
           >
             <Search size={17} />
-          </button>
-          <button
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "#888",
-              position: "relative",
-            }}
-          >
-            <Bell size={17} />
-            <div
+          </button> */}
+          <div style={{ position: "relative" }}>
+            <button
+              onClick={() => setShowNotifications(!showNotifications)} // Toggle
               style={{
-                position: "absolute",
-                top: 7,
-                right: 7,
-                width: 6,
-                height: 6,
-                borderRadius: "50%",
-                background: "#ef4444",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#888",
+                position: "relative",
               }}
-            />
-          </button>
-          <button
+            >
+              <Bell size={17} />
+              <div
+                style={{
+                  position: "absolute",
+                  top: 6,
+                  right: 6,
+                  width: 7,
+                  height: 7,
+                  borderRadius: "50%",
+                  background: "#ef4444",
+                  border: "2px solid #0d0e12", // Helps it stand out
+                }}
+              />
+            </button>
+
+            {/* Dropdown Notification Panel */}
+            {showNotifications && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "52px", // Just below the nav bar
+                  right: "10px",
+                  width: 360,
+                  background: "#111318",
+                  borderRadius: 14,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  boxShadow: "0 15px 35px rgba(0,0,0,0.6)",
+                  zIndex: 100,
+                  overflow: "hidden",
+                }}
+              >
+                {/* Header */}
+                <div
+                  style={{
+                    padding: "14px 18px",
+                    borderBottom: "1px solid rgba(255,255,255,0.06)",
+                    fontWeight: 600,
+                    fontSize: 15,
+                  }}
+                >
+                  Notifications
+                </div>
+
+                {/* Notification Content */}
+                <div style={{ padding: 16 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 14,
+                      padding: "14px 16px",
+                      background: "#1a1c24",
+                      borderRadius: 12,
+                      borderLeft: "4px solid #d97706",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: "50%",
+                        overflow: "hidden",
+                        border: "2px solid #d9770666",
+                      }}
+                    >
+                      <GameIcon gameId="chess" accentColor="#d97706" />
+                    </div>
+
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700 }}>
+                        Chess Arena is now live!
+                      </div>
+                      <p
+                        style={{
+                          margin: "6px 0 0",
+                          fontSize: 14,
+                          color: "#ccc",
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        Stake XLM and compete in chess matches.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div
+                  style={{
+                    padding: "12px 18px",
+                    textAlign: "center",
+                    borderTop: "1px solid rgba(255,255,255,0.06)",
+                    color: "#666",
+                    fontSize: 13,
+                  }}
+                >
+                  No more notifications
+                </div>
+              </div>
+            )}
+          </div>
+          {/* <button
             style={{
               background: "none",
               border: "none",
@@ -1409,7 +1503,7 @@ export default function HomePage() {
             }}
           >
             <Heart size={17} />
-          </button>
+          </button> */}
 
           {/* Wallet chip */}
           {/* <div
@@ -1571,7 +1665,7 @@ export default function HomePage() {
               i
             </div>
             <p style={{ margin: 0, fontSize: 12, color: "#444" }}>
-            Independent gaming nodes secured by trustless onchain bonds.
+              Independent gaming nodes secured by trustless onchain bonds.
             </p>
             <button
               style={{
