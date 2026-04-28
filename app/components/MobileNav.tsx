@@ -22,7 +22,9 @@ export default function MobileNav({ navItems }: MobileNavProps) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
-  useEffect(() => { setOpen(false); }, [pathname]);
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (open) {
@@ -30,7 +32,9 @@ export default function MobileNav({ navItems }: MobileNavProps) {
     } else {
       document.body.style.overflow = "";
     }
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [open]);
 
   return (
@@ -46,10 +50,16 @@ export default function MobileNav({ navItems }: MobileNavProps) {
         </button>
 
         <Link href="/" className="flex items-center gap-2.5">
-          <Image src="/KingFall_logo.png" alt="KingFall Logo" width={28} height={28} className="object-contain" />
+          <Image
+            src="/Kizuna.png"
+            alt="Kizuna Logo"
+            width={28}
+            height={28}
+            className="object-contain"
+          />
           <h1 className="text-lg uppercase tracking-[0.2em]">
-            <span className="kingfall-font">King</span>
-            <span className="kingfall-font">Fall</span>
+            <span className="kingfall-font">KIZUNA</span>
+ 
           </h1>
         </Link>
 
@@ -62,7 +72,9 @@ export default function MobileNav({ navItems }: MobileNavProps) {
       <div
         onClick={() => setOpen(false)}
         className={`md:hidden fixed inset-0 z-60 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${
-          open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+          open
+            ? "opacity-100 pointer-events-auto"
+            : "opacity-0 pointer-events-none"
         }`}
         aria-hidden="true"
       />
@@ -77,10 +89,16 @@ export default function MobileNav({ navItems }: MobileNavProps) {
         {/* Drawer header */}
         <div className="flex items-center justify-between px-4 h-14 border-b border-zinc-800/50 shrink-0">
           <Link href="/" className="flex items-center gap-2.5">
-            <Image src="/KingFall_logo.png" alt="KingFall Logo" width={28} height={28} className="object-contain" />
+            <Image
+              src="/Kizuna.png"
+              alt="KingFall Logo"
+              width={28}
+              height={28}
+              className="object-contain"
+            />
             <h1 className="text-lg uppercase tracking-[0.2em]">
-              <span className="kingfall-font">King</span>
-              <span className="kingfall-font">Fall</span>
+              <span className="kingfall-font">Kizuna</span>
+ 
             </h1>
           </Link>
           <button
@@ -97,6 +115,7 @@ export default function MobileNav({ navItems }: MobileNavProps) {
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             const isPlay = item.href === "/play";
+            // Using your current logic for disabled states
             const isDisabled = !isPlay;
 
             return (
@@ -106,36 +125,50 @@ export default function MobileNav({ navItems }: MobileNavProps) {
                 onClick={isDisabled ? (e) => e.preventDefault() : undefined}
                 aria-disabled={isDisabled}
                 tabIndex={isDisabled ? -1 : undefined}
-                className={`group flex items-center gap-3 px-3 py-3 rounded-xl border transition-all duration-200 ${
+                className={`group flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 ${
                   isDisabled
-                    ? "opacity-30 cursor-not-allowed border-transparent pointer-events-none select-none"
+                    ? "opacity-30 cursor-not-allowed select-none"
                     : isActive
-                    ? "text-emerald-400 bg-emerald-500/8 border-emerald-500/20"
-                    : "text-zinc-400 hover:text-amber-400 hover:bg-emerald-500/5 border-transparent hover:border-emerald-500/10"
+                    ? "text-amber-400 bg-amber-400/5"
+                    : "text-zinc-400 hover:text-amber-400 hover:bg-amber-400/5"
                 }`}
               >
-                <span className={`transition-colors duration-200 ${
-                  isDisabled ? "text-zinc-500" : isActive ? "text-amber-400" : "text-zinc-500 group-hover:text-amber-400"
-                }`}>
+                <span
+                  className={`flex items-center justify-center w-9 h-9 shrink-0 rounded-lg border transition-all duration-200 ${
+                    isDisabled
+                      ? "border-zinc-800/50 bg-zinc-900/20 text-zinc-600"
+                      : isActive
+                      ? "border-amber-500/50 bg-amber-500/10 text-amber-400"
+                      : "border-zinc-800 bg-zinc-900 text-zinc-500 group-hover:border-amber-500/50 group-hover:bg-amber-500/10 group-hover:text-amber-400"
+                  }`}
+                >
                   {item.icon}
                 </span>
+
                 <span className="font-semibold text-sm tracking-wide font-mono uppercase">
                   {item.label}
                 </span>
-                {isActive && !isDisabled && (
-                  <span className="ml-auto text-amber-500 text-xs">→</span>
+
+                {!isDisabled && (
+                  <span
+                    className={`ml-auto transition-opacity duration-200 text-amber-500 text-xs ${
+                      isActive
+                        ? "opacity-100"
+                        : "opacity-0 group-hover:opacity-100"
+                    }`}
+                  >
+                    →
+                  </span>
                 )}
               </Link>
             );
           })}
-                {/* ── Profile + Wallet at bottom ── */}
-        <div className="px-4 py-5 border-t border-zinc-800/50 shrink-0 space-y-3">
-          <SidebarProfile />
-          <WalletConnection />
+          {/* ── Profile + Wallet at bottom ── */}
+          <div className="px-4 py-5 border-t border-zinc-800/50 shrink-0 space-y-3">
+            <SidebarProfile />
+            <WalletConnection />
+          </div>
         </div>
-        </div>
-
-  
       </nav>
     </>
   );

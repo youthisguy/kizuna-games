@@ -38,3 +38,73 @@ body {
 *::-webkit-scrollbar {
   display: none; /* Chrome/Safari/Opera */
 }
+/* The Main Wrapper - Full Width */
+.kizuna-3d-btn-square {
+  appearance: none;
+  background: none !important;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  overflow: visible;
+  width: 100%; 
+  display: block;
+  margin-top: 16px;
+  transform: translate(-3px); 
+}
+
+ 
+.kizuna-3d-btn-square::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 0; 
+  background: #78350f; 
+  transform: translate(6px, 6px);
+  z-index: 0;
+}
+
+ 
+.btn-face-square {
+  position: relative;
+  z-index: 1;
+  background: #d97706; 
+  border-radius: 0;  
+  height: 52px;  
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-weight: 800;
+  color: #000;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  transition: transform 0.1s ease, background 0.1s ease;
+  border-top: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+ 
+.kizuna-3d-btn-square:hover .btn-face-square {
+  background: #fbbf24;
+  transform: translate(-2px, -2px);
+}
+
+ 
+.kizuna-3d-btn-square:active .btn-face-square {
+  transform: translate(4px, 4px);
+}
+
+ 
+.kizuna-3d-btn-square:active::before {
+  transform: translate(6px, 6px);
+}
+
+.desktop-only-nav {
+  display: none !important;  
+}
+
+@media (min-width: 768px) {
+  .desktop-only-nav {
+    display: flex !important;  
+  }
+}

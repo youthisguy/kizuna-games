@@ -2,7 +2,16 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useCallback, useState } from "react";
-import { Star, TrendingUp, Heart, Search, Bell, Wallet, ArrowUpAZIcon, ArrowUpCircle } from "lucide-react";
+import {
+  Star,
+  TrendingUp,
+  Heart,
+  Search,
+  Bell,
+  Wallet,
+  ArrowUpAZIcon,
+  ArrowUpCircle,
+} from "lucide-react";
 
 // ─── Game definitions ─────────────────────────────────────────────────────────
 const GAMES = [
@@ -1171,53 +1180,60 @@ function SpotlightCard({
               pointerEvents: "auto",
             }}
           >
-            {/* Vote count pill */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                background: "rgba(0,0,0,0.6)",
-                backdropFilter: "blur(6px)",
-                borderRadius: 20,
-                padding: "4px 10px",
-                border: "1px solid rgba(255,255,255,0.12)",
-              }}
-            >
-              <ArrowUpCircle size={11} style={{ color: game.accentColor }} />
-              <span style={{ fontSize: 11, fontWeight: 700, color: "#fff" }}>
-                {fmtVotes(game.votes)}
-              </span>
-            </div>
-
-            {/* Heart */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setLiked((l) => !l);
-              }}
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: "50%",
-                background: "rgba(0,0,0,0.6)",
-                backdropFilter: "blur(6px)",
-                border: "1px solid rgba(255,255,255,0.12)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-              }}
-            >
-              <Heart
-                size={13}
+            {/* Vote count */}
+            {isLive ? (
+              <div
                 style={{
-                  color: liked ? "#ef4444" : "#888",
-                  fill: liked ? "#ef4444" : "none",
-                  transition: "all 0.15s",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  background: "rgba(0,0,0,0.6)",
+                  backdropFilter: "blur(6px)",
+                  borderRadius: 20,
+                  padding: "4px 10px",
+                  border: "1px solid rgba(255,255,255,0.12)",
                 }}
-              />
-            </button>
+              >
+                <ArrowUpCircle size={11} style={{ color: game.accentColor }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#fff" }}>
+                  {fmtVotes(game.votes)}
+                </span>
+              </div>
+            ) : (
+              <></>
+            )}
+
+            {isLive ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLiked((l) => !l);
+                }}
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  background: "rgba(0,0,0,0.6)",
+                  backdropFilter: "blur(6px)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                }}
+              >
+                <Heart
+                  size={13}
+                  style={{
+                    color: liked ? "#ef4444" : "#888",
+                    fill: liked ? "#ef4444" : "none",
+                    transition: "all 0.15s",
+                  }}
+                />
+              </button>
+            ) : (
+              <></>
+            )}
           </div>
         </div>
       </div>
@@ -1316,6 +1332,7 @@ export default function HomePage() {
     >
       {/* Top nav bar */}
       <nav
+        className="desktop-only-nav"
         style={{
           position: "sticky",
           top: 0,
@@ -1395,7 +1412,7 @@ export default function HomePage() {
           </button>
 
           {/* Wallet chip */}
-          <div
+          {/* <div
             style={{
               display: "flex",
               alignItems: "center",
@@ -1419,9 +1436,9 @@ export default function HomePage() {
             <span style={{ fontSize: 13, fontWeight: 600, color: "#e0e0e0" }}>
               $0.02
             </span>
-          </div>
+          </div> */}
 
-          <div
+          {/* <div
             style={{
               width: 32,
               height: 32,
@@ -1430,148 +1447,150 @@ export default function HomePage() {
               marginLeft: 4,
               cursor: "pointer",
             }}
-          />
+          /> */}
         </div>
       </nav>
 
       <div
-  style={{
-    position: "relative",
-    background: "#08080a",  
-    minHeight: "100vh",
-    overflow: "hidden",
-  }}
->
-  {/* The "Sheen" Layer  */}
-  <div
-    style={{
-      position: "absolute",
-      top: "-10%",
-      right: "-10%",
-      width: "60%",
-      height: "60%",
-      background: `radial-gradient(circle at 70% 30%, #d9770622 0%, #d9770605 50%, transparent 70%)`,
-      filter: "blur(60px)",
-      pointerEvents: "none",
-      zIndex: 0,
-    }}
-  />
-
-      {/* Main content */}
-      <div
-        style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 20px 60px" }}
+        style={{
+          position: "relative",
+          background: "#08080a",
+          minHeight: "100vh",
+          overflow: "hidden",
+        }}
       >
-        {/* Section header */}
+        {/* The "Sheen" Layer  */}
         <div
           style={{
-            display: "flex",
-            alignItems: "flex-end",
-            justifyContent: "space-between",
-            marginBottom: 20,
+            position: "absolute",
+            top: "-10%",
+            right: "-10%",
+            width: "60%",
+            height: "60%",
+            background: `radial-gradient(circle at 70% 30%, #d9770622 0%, #d9770605 50%, transparent 70%)`,
+            filter: "blur(60px)",
+            pointerEvents: "none",
+            zIndex: 0,
           }}
-        >
-          <div>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: 22,
-                fontWeight: 700,
-                color: "#fff",
-                letterSpacing: "-0.02em",
-              }}
-            >
-              Kizuna Games
-            </h1>
-            <p style={{ margin: "4px 0 0", fontSize: 13, color: "#555" }}>
-              Enjoy Peer-to-peer skill based games
-            </p>
-          </div>
-          <button
-            style={{
-              background: "none",
-              border: "1px solid rgba(255,255,255,0.12)",
-              borderRadius: 8,
-              padding: "6px 14px",
-              fontSize: 12,
-              fontWeight: 600,
-              color: "#888",
-              cursor: "pointer",
-              letterSpacing: "0.02em",
-            }}
-          >
-            Explore all
-          </button>
-        </div>
+        />
 
-        {/* Card grid — 3 columns */}
+        {/* Main content */}
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
-            gap: 14,
+            maxWidth: 1100,
+            margin: "0 auto",
+            padding: "28px 20px 60px",
           }}
         >
-          {GAMES.map((game) => (
-            <SpotlightCard
-              key={game.id}
-              game={game}
-              onClick={() => go(game.href)}
-            />
-          ))}
-        </div>
-
-        {/* Footer note */}
-        <div
-          style={{
-            marginTop: 36,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "12px 16px",
-            background: "#111318",
-            borderRadius: 10,
-            border: "1px solid rgba(255,255,255,0.05)",
-          }}
-        >
+          {/* Section header */}
           <div
             style={{
-              width: 18,
-              height: 18,
-              borderRadius: "50%",
-              border: "1px solid #444",
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "space-between",
+              marginBottom: 20,
+            }}
+          >
+            <div>
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: "#fff",
+                  letterSpacing: "-0.02em",
+                }}
+              >
+                Kizuna Games
+              </h1>
+              <p style={{ margin: "4px 0 0", fontSize: 13, color: "#555" }}>
+                Enjoy Peer-to-peer skill based games
+              </p>
+            </div>
+            <button
+              style={{
+                background: "none",
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: 8,
+                padding: "6px 14px",
+                fontSize: 12,
+                fontWeight: 600,
+                color: "#888",
+                cursor: "pointer",
+                letterSpacing: "0.02em",
+              }}
+            >
+              Explore all
+            </button>
+          </div>
+
+          {/* Card grid — 3 columns */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+              gap: 14,
+            }}
+          >
+            {GAMES.map((game) => (
+              <SpotlightCard
+                key={game.id}
+                game={game}
+                onClick={() => go(game.href)}
+              />
+            ))}
+          </div>
+
+          {/* Footer note */}
+          <div
+            style={{
+              marginTop: 36,
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              fontSize: 10,
-              color: "#555",
-              flexShrink: 0,
+              gap: 8,
+              padding: "12px 16px",
+              background: "#111318",
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.05)",
             }}
           >
-            i
+            <div
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: "50%",
+                border: "1px solid #444",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 10,
+                color: "#555",
+                flexShrink: 0,
+              }}
+            >
+              i
+            </div>
+            <p style={{ margin: 0, fontSize: 12, color: "#444" }}>
+            Independent gaming nodes secured by trustless onchain bonds.
+            </p>
+            <button
+              style={{
+                marginLeft: "auto",
+                flexShrink: 0,
+                background: "none",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 6,
+                padding: "4px 10px",
+                fontSize: 11,
+                color: "#555",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Learn the Logic
+            </button>
           </div>
-          <p style={{ margin: 0, fontSize: 12, color: "#444" }}>
-            Spotlight Games are independent skill-based platforms on Stellar ·
-            Powered by Soroban smart contracts
-          </p>
-          <button
-            style={{
-              marginLeft: "auto",
-              flexShrink: 0,
-              background: "none",
-              border: "1px solid rgba(255,255,255,0.08)",
-              borderRadius: 6,
-              padding: "4px 10px",
-              fontSize: 11,
-              color: "#555",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-            }}
-          >
-            How are games chosen?
-          </button>
         </div>
-      </div>
-
       </div>
     </div>
   );

@@ -22,7 +22,7 @@ export default function WalletConnection({ compact = false }: WalletConnectionPr
     try {
       setLoading(true);
       await walletsKit.openModal({
-        onWalletSelected: async (option) => {
+        onWalletSelected: async (option: { id: any; }) => {
           walletsKit.setWallet(option.id);
           const { address } = await walletsKit.getAddress();
           setAddress(address);
@@ -94,7 +94,7 @@ export default function WalletConnection({ compact = false }: WalletConnectionPr
 
   if (!address) {
     return (
-      <div className="flex justify-start w-full">
+      <div className="flex justify-start hover:cursor-pointer w-full">
         <button
           onClick={handleConnect}
           disabled={loading}

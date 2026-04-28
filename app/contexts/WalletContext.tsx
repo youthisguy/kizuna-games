@@ -1,33 +1,46 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode, useMemo } from "react";
 import {
-  StellarWalletsKit,
-  WalletNetwork,
-  FreighterModule,
-  AlbedoModule,
-  xBullModule,
-  LobstrModule,
-} from "@creit.tech/stellar-wallets-kit";
-import {
-  WalletConnectModule,
-  WalletConnectAllowedMethods,
-} from "@creit.tech/stellar-wallets-kit/modules/walletconnect.module";
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+  useEffect,
+} from "react";
 
 interface WalletContextType {
   address: string | null;
   setAddress: (addr: string | null) => void;
-  walletsKit: StellarWalletsKit;
+  walletsKit: any;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
+  const [walletsKit, setWalletsKit] = useState<any>(null);
 
-  const walletsKit = useMemo(
-    () =>
-      new StellarWalletsKit({
+  useEffect(() => {
+    let mounted = true;
+
+    async function init() {
+      const {
+        StellarWalletsKit,
+        WalletNetwork,
+        FreighterModule,
+        AlbedoModule,
+        xBullModule,
+        LobstrModule,
+      } = await import("@creit.tech/stellar-wallets-kit");
+
+      const {
+        WalletConnectModule,
+        WalletConnectAllowedMethods,
+      } = await import(
+        "@creit.tech/stellar-wallets-kit/modules/walletconnect.module"
+      );
+
+      const kit = new StellarWalletsKit({
         network: WalletNetwork.TESTNET,
         modules: [
           new FreighterModule(),
@@ -35,19 +48,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           new xBullModule(),
           new LobstrModule(),
           new WalletConnectModule({
-            projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "",
-            name: "KingFall",
+            projectId:
+              process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "",
+            name: "Kizuna",
             description:
               "P2P onchain chess on Stellar. Stake XLM, winner takes all.",
-            url: "https://kingfall-self.vercel.app/",
-            icons: ["https://kingfall-self.vercel.app/icon.png"],
+            url: "https://kizuna.vercel.app/",
+            icons: ["https://kizuna.vercel.app/icon.png"],
             method: WalletConnectAllowedMethods.SIGN,
             network: WalletNetwork.TESTNET,
           }),
         ],
-      }),
-    []
-  );
+      });
+
+      if (mounted) setWalletsKit(kit);
+    }
+
+    init();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <WalletContext.Provider value={{ address, setAddress, walletsKit }}>
