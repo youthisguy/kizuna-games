@@ -1,15 +1,15 @@
-# ♚ KingFall — P2P Onchain Chess on Stellar
+# ♚ Kizuna — P2P Skill-Stakes Arcade on Stellar
 
-> Stake XLM. Play Chess. Winner claims all. Every move recorded onchain.
+> Stake XLM. Prove your skill. Winner claims all. Trustless gaming secured by Soroban.
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-black?style=flat-square)](https://kingfall-self.vercel.app)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-black?style=flat-square)](https://kizuna-self.vercel.app)
 [![Demo Video](https://img.shields.io/badge/Demo%20Video-Watch-red?style=flat-square)](https://youtu.be/hs7aOUaPQqw?si=CwC-NiZL54xVmsc8)
 
 ---
 
 ## Live Demo
 
-> **[https://kingfall-self.vercel.app](https://kingfall-self.vercel.app)**
+> **[https://kizuna-games.vercel.app](https://kizuna-games.vercel.app)**
 
 ## Demo Video
 
@@ -19,10 +19,17 @@ The video covers: creating a game, staking XLM, joining as black, making moves (
 
 ---
 
-## What is KingFall?
+## What is Kizuna?
 
-KingFall is a P2P chess platform built on Stellar/Soroban. Two players stake equal amounts of XLM into a Soroban escrow contract. Every move is committed to the game contract as an immutable record. The winner's `finish_game` transaction triggers payout — the pot minus a 1.5% protocol fee goes directly to their wallet. Draws split the pot.
+Kizuna (絆 - "Bond") is an arcade hub for independent, skill-based platforms built on Stellar. Unlike traditional gaming sites, Kizuna uses Soroban smart contracts to act as a trustless escrow. Players stake digital assets (XLM) into a secure "bond" before a match. The protocol ensures that the pot is only released to the winner based on immutable onchain move records.
 
+Current Supported:
+
+Chess: Full move-validation and FEN-syncing onchain.
+
+Pool (Coming Soon): Physics-based wagering.
+
+Battleship (Coming Soon): Zero-knowledge stake protection.
 ---
 
 ## Screenshots
@@ -41,54 +48,39 @@ KingFall is a P2P chess platform built on Stellar/Soroban. Two players stake equ
 ```
 .
 ├── contracts/
-│   ├── kingfall-escrow/    # Stake management, game lifecycle, payouts
-│   ├── kingfall-game/      # Move history, FEN state, game records
-│   └── kingfall-payout/    # Fee treasury, leaderboard, season prizes
-└── app/                    # Next.js 14 frontend
-    ├── play/
-    │   ├── page.tsx        # Lobby — create/join/browse games
-    │   └── [id]/
-    │       └── page.tsx    # Game board — live play, move history
-    ├── profile/[userId]/
-    │   └── page.tsx        # Player profile — ELO, stats, game history
-    ├── metrics/
-    │   └── page.tsx        # Live metrics dashboard — DAU, retention, transactions
-    └── api/
-        └── fee-bump/
-            └── route.ts    # Fee sponsorship — gasless tx for users
+│   ├── kizuna-escrow/    # Global stake management & multi-game payouts
+│   ├── kizuna-chess/     # Chess-specific: Move history, FEN state, validation
+│   └── kizuna-payout/    # Fee treasury & season prize distribution
+└── app/                  # Next.js 14 Hub
+├── play/             # The Game Lobby — discover and join active bonds
+├── chess/            # Dedicated Chess platform logic
+├── metrics/          # Network-wide analytics (DAU, Total Staked)
+└── api/
+└── fee-bump/     # Protocol-level fee sponsorship (Gasless play)
 ```
 
-### Contract Flow
+### Protocol Flow
 
 ```
-1. White calls escrow.create_game(stake, token)
-   → GameData created, XLM locked, status = Waiting
+1.  **The Bond:** Player A creates a game in `kizuna-escrow`. XLM is locked.
 
-2. Black calls escrow.join_game(id)
-   → Black's stake locked, status = Active
+2.  **The Connection:** Player B joins. The bond is activated.
 
-3. Black calls game.create_game(white, black, escrow_id)
-   → Game record created, moves array initialized
+3.  **The Proof:** Every significant action (e.g., a Chess move) is committed to the specific game contract as an immutable record.
 
-4. Players alternate: game.commit_move(id, player, san, fen_after)
-   → MoveRecord appended onchain with SAN notation + FEN
+4.  **The Settlement:** Upon victory, the winner triggers `finish_game`. The escrow contract verifies the game status and releases **98.5%** of the pot to the winner (**1.5%** protocol fee).
 
-5. On checkmate/stalemate/resign:
-   → escrow.finish_game(id, caller, outcome, moves)
-   → Escrow pays winner (98.5%) or splits pot (draw)
-   → game.complete_game() marks record as settled
 ```
 
 ### Key Design Patterns
 
-**Escrow-first architecture** — XLM never leaves the escrow contract until the game concludes. The contract enforces that only valid participants can trigger payouts.
+* **Escrow-First Security:** XLM never leaves the smart contract until a winner is determined by the game logic.
 
-**FEN-based state sync** — each `commit_move` stores both the SAN move and the resulting FEN string. This allows any client to reconstruct the full board position for any move.
+* **Gasless Transactions:** Kizuna implements **Fee Sponsorship**. Users sign the transaction logic, but the Kizuna protocol account pays the network fees.
 
-**Fallback account reads** — all contract reads use a funded fallback account as the simulation source, so board state, open games, and stake amounts load immediately without a connected wallet.
+* **Pure Black/White UI:** A high-end, reflective arcade aesthetic designed for immersive competition.
 
-**Game contract ID decoupling** — the game contract assigns its own auto-increment IDs. The frontend scans `get_all_games()` to match `escrow_id` to the correct game contract record, handling the case where they differ.
-
+* **Universal Metrics:** A unified dashboard tracking Daily Active Users (DAU) and total network volume across all Kizuna titles.
 ---
 
 ## Contract Addresses (Testnet)
@@ -104,7 +96,7 @@ KingFall is a P2P chess platform built on Stellar/Soroban. Two players stake equ
 
 ## Contract Functions
 
-### Escrow (`kingfall-escrow`)
+### Escrow (`kizuna-escrow`)
 
 | Function | Description |
 |---|---|
@@ -118,7 +110,7 @@ KingFall is a P2P chess platform built on Stellar/Soroban. Two players stake equ
 | `get_active_games()` | Vec of waiting game IDs |
 | `get_player_games(player)` | Vec of game IDs for a player |
 
-### Game (`kingfall-game`)
+### Game (`kizuna-game`)
 
 | Function | Description |
 |---|---|
@@ -144,7 +136,7 @@ KingFall is a P2P chess platform built on Stellar/Soroban. Two players stake equ
 
 ## Metrics Dashboard
 
-> **[Live Metrics → kingfall-self.vercel.app/metrics](https://kingfall-self.vercel.app/metrics)**
+> **[Live Metrics → kizuna-self.vercel.app/metrics](https://kizuna-self.vercel.app/metrics)**
 
 The `/metrics` page fetches live data directly from Supabase DB and displays:
 
@@ -161,7 +153,7 @@ The `/metrics` page fetches live data directly from Supabase DB and displays:
 
 ## Monitoring
 
-KingFall uses three monitoring layers:
+kizuna uses three monitoring layers:
 
 **1. Vercel Analytics (Frontend)**
 - Page views, unique visitors, Web Vitals (LCP, FID, CLS)
@@ -204,7 +196,7 @@ KingFall uses three monitoring layers:
 
 ## Advanced Feature — Fee Sponsorship (Gasless Transactions)
 
-KingFall implements **fee bump transactions** so users pay zero XLM in transaction fees. Every game action — create, join, commit move, finish — is sponsored by the KingFall protocol account.
+kizuna implements **fee bump transactions** so users pay zero XLM in transaction fees. Every game action — create, join, commit move, finish — is sponsored by the kizuna protocol account.
 
 **How it works:**
 
@@ -237,7 +229,7 @@ feeBumpTx.sign(sponsorKeypair);
 
 ## Data Indexing
 
-KingFall uses **Supabase as a real-time data index** over Stellar onchain events.
+kizuna uses **Supabase as a real-time data index** over Stellar onchain events.
 
 **Indexed tables:**
 
@@ -260,14 +252,14 @@ Body: { "sort_by": "elo_rating", "limit": 50 }
 
 **Metrics endpoint:**
 ```
-GET https://kingfall-self.vercel.app/metrics
+GET https://kizuna-self.vercel.app/metrics
 ```
 
 ---
 
 ## Community Contribution
 
-> **[KingFall launch post on X/Twitter →](https://x.com/youthisman/status/2048045759912698034)**
+> **[post on X/Twitter →](https://x.com/youthisman/status/2048045759912698034)**
 
 Posted to the Stellar Developer Discord `#build` channel and Twitter/X announcing the MVP launch, demo video, and inviting testnet users.
 
@@ -275,7 +267,7 @@ Posted to the Stellar Developer Discord `#build` channel and Twitter/X announcin
 
 ## User Onboarding & Feedback
 
-> **[Fill out the KingFall onboarding form →](https://docs.google.com/forms/d/1LNcoKAhoo5aT2hC0wLs3Qs5Cf32ZVGxVWkFpxehRAPk/viewform)**
+> **[Fill out the kizuna onboarding form →](https://docs.google.com/forms/d/1LNcoKAhoo5aT2hC0wLs3Qs5Cf32ZVGxVWkFpxehRAPk/viewform)**
 
 New users: submit your wallet address, email, and product feedback via the form above.
 
@@ -288,9 +280,9 @@ All form responses including wallet addresses and product ratings are tracked in
 ## Improvements/User Feedback
 
 ### Shipped — Iteration 1
-- **Castling support** — Implemented kingside and queenside castling per standard chess rules. [View commit →](https://github.com/youthisguy/kingfall/commit/fa3b278608eab3c97964a773b773c4194ce58874)
-- **En passant capture** — en passant was rejected during testing. Implemented per standard rules. [View commit →](https://github.com/youthisguy/kingfall/commit/fa3b278608eab3c97964a773b773c4194ce58874)
-- **Active games visible without game ID** — The lobby now auto-loads all user's games (created and joined) on mount. [View commit →](https://github.com/youthisguy/kingfall/commit/ede1b32af326a716aaabd8be2d5493591e1be67a)
+- **Castling support** — Implemented kingside and queenside castling per standard chess rules. [View commit →](https://github.com/youthisguy/kizuna/commit/fa3b278608eab3c97964a773b773c4194ce58874)
+- **En passant capture** — en passant was rejected during testing. Implemented per standard rules. [View commit →](https://github.com/youthisguy/kizuna/commit/fa3b278608eab3c97964a773b773c4194ce58874)
+- **Active games visible without game ID** — The lobby now auto-loads all user's games (created and joined) on mount. [View commit →](https://github.com/youthisguy/kizuna/commit/ede1b32af326a716aaabd8be2d5493591e1be67a)
 
 ### Planned — Iteration 2
 
@@ -303,14 +295,14 @@ Directly from user feedback:
 
 ## Roadmap
 
-Future Plans for Kingfall:
+Future Plans for kizuna:
 
 - **ELO Ranking System** — Trustless onchain ELO engine (K=32) that automatically updates after every completed game. New players start at 1200.
 - **Rich Onchain Player Profiles** — Dedicated profile page showing ELO rating, win/loss/draw statistics, win rate, current streak, total XLM won, and rating history.
-- **Achievement Badges as NFTs** — SEP-50 compliant NFTs automatically minted for milestones (First Win, 5/10/25 win streaks, rating thresholds like 1400/1600/1800+, tournament wins, etc.).
+- **Achievement Badges as NFTs**  - SEP-50 compliant NFTs automatically minted for milestones like "10 Win Streak" or "Tournament Champion."
 - **Leaderboards** — Global and seasonal ELO leaderboards with top players eligible for prize pools from the protocol fee treasury.
-- **Tournament Support** — Create or join bracket-style and Swiss-system tournaments with entry fees and automated onchain prize distribution.
-
+- **Tournament Brackets:** Automated on-chain tournament hosting with multi-player prize pools.
+- **Kizuna SDK:** Allowing third-party developers to plug their own game logic into the Kizuna Escrow protocol.
 ---
 
 ## Getting Started
@@ -343,19 +335,19 @@ export ADMIN=$(stellar keys address my-account)
 
 # Deploy escrow
 stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/kingfall_escrow.wasm \
+  --wasm target/wasm32-unknown-unknown/release/kizuna_escrow.wasm \
   --source my-account --network testnet
 export ESCROW_ID=<printed_id>
 
 # Deploy game
 stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/kingfall_game.wasm \
+  --wasm target/wasm32-unknown-unknown/release/kizuna_game.wasm \
   --source my-account --network testnet
 export GAME_ID=<printed_id>
 
 # Deploy payout
 stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/kingfall_payout.wasm \
+  --wasm target/wasm32-unknown-unknown/release/kizuna_payout.wasm \
   --source my-account --network testnet
 export PAYOUT_ID=<printed_id>
 
@@ -437,7 +429,7 @@ stellar contract invoke --id $GAME_ID --source my-account --network testnet \
 
 ## User Wallet Addresses (Testnet)
 
-The following wallets have interacted with the KingFall contracts on Stellar Testnet, verifiable on [Stellar Expert](https://stellar.expert/explorer/testnet):
+The following wallets have interacted with the kizuna contracts on Stellar Testnet, verifiable on [Stellar Expert](https://stellar.expert/explorer/testnet):
 
 | # | Address | Role |
 |---|---|---|

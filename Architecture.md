@@ -1,14 +1,14 @@
-# KingFall — Architecture Document
+# Kizuna — Architecture Document
 
 ## Overview
 
-KingFall is a fully onchain P2P chess game on Stellar. All game state — stakes, moves, outcomes — lives in Soroban smart contracts. The frontend is a stateless Next.js client that reads from and writes to contracts directly via the Soroban RPC.
+Kizuna is a decentralized, skill-stakes arcade hub built on Stellar. It facilitates peer-to-peer competition by using Soroban smart contracts to create trustless "financial bonds" between players.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Browser (Next.js)                        │
 │                                                                 │
-│   /play (Lobby)              /play/[id] (Game Board)            │
+│   /chess               /play/[id] (Game Board)            │
 │   ─────────────              ─────────────────────              │
 │   • Browse open games        • Render board from FEN            │
 │   • Create & stake           • Commit moves onchain             │
@@ -36,7 +36,7 @@ KingFall is a fully onchain P2P chess game on Stellar. All game state — stakes
 
 ## Smart Contracts
 
-### 1. Escrow Contract (`kingfall-escrow`)
+### 1. Escrow Contract (`kizuna-escrow`)
 
 The financial heart of the system. Holds XLM stakes, enforces game lifecycle transitions, and executes payouts.
 
@@ -82,7 +82,7 @@ Draw payout    = stake × 0.985 each  (each gets back 98.5% of own stake)
 
 ---
 
-### 2. Game Contract (`kingfall-game`)
+### 2. Game Contract (`kizuna-game`)
 
 Records the full move history and board state for every game. Decoupled from the escrow so financial and game logic are separated.
 
@@ -129,7 +129,7 @@ pub struct MoveRecord {
 
 ---
 
-### 3. Payout Contract (`kingfall-payout`)
+### 3. Payout Contract (`kizuna-payout`)
 
 Receives the 1.5% protocol fee from every settled game. Manages the fee treasury, a season prize pool, and emits an NFT mint event (`kfp/nftmint`) on game completion. Currently the NFT contract is a placeholder pending SEP-50 implementation.
 
