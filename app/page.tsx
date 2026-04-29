@@ -13,12 +13,12 @@ import {
   ArrowUpCircle,
 } from "lucide-react";
 
-// ─── Game definitions ─────────────────────────────────────────────────────────
+ 
 const GAMES = [
   {
     id: "chess",
     name: "Chess Arena",
-    category: "Skill Based Games",
+    category: "Strategize. Stake. Checkmate.",
     tagline: "Stake. Play. Conquer.",
     description:
       "P2P chess with XLM stakes locked in Soroban escrow. Winner claims all.",
@@ -32,7 +32,7 @@ const GAMES = [
   {
     id: "battleship",
     name: "Battleship Wars",
-    category: "Skill Based Games",
+    category: "Coordinate. Strike. Sink.",
     tagline: "Sink or be sunk.",
     description:
       "Classic naval warfare on-chain. Hide your fleet, call your shots.",
@@ -46,7 +46,7 @@ const GAMES = [
   {
     id: "darts",
     name: "Darts & Archery",
-    category: "Skill Based Games",
+    category: "Aim. Release. Bullseye.",
     tagline: "Aim. Fire. Win.",
     description:
       "Precision skill games on Stellar. Hit the bullseye to take the pot.",
@@ -60,7 +60,7 @@ const GAMES = [
   {
     id: "words",
     name: "Word Hunt",
-    category: "Skill Based Games",
+    category: "Unscramble. Sprint. Win.",
     tagline: "Anagrams & Word Hunt.",
     description:
       "Race against your opponent to unscramble words and claim the stake.",
@@ -74,7 +74,7 @@ const GAMES = [
   {
     id: "pool",
     name: "8-Ball Pool",
-    category: "Skill Based Games",
+    category: "Rack. Call. Clear.",
     tagline: "Rack 'em. Break 'em.",
     description:
       "Call your pockets and run the table. XLM pot for the one who clears it.",
@@ -1324,19 +1324,18 @@ export default function HomePage() {
   );
 
   return (
-    <div
-      onClick={() => {
-        setShowNotifications(!showNotifications);
-      }}
-      style={{
-        minHeight: "100vh",
-        background: "#0d0e12",
-        fontFamily: "'Inter', 'SF Pro Display', system-ui, sans-serif",
-        color: "#e0e0e0",
-      }}
-    >
+<div
+ 
+  className="min-h-screen bg-[#0d0e12] text-[#e0e0e0]  rounded-lg overflow-hidden shadow-inner"
+  style={{
+    fontFamily: "'Inter', 'SF Pro Display', system-ui, sans-serif",
+  }}
+>
       {/* Top nav bar */}
       <nav
+       onClick={() => {
+        setShowNotifications(!showNotifications);
+      }}
         className="desktop-only-nav"
         style={{
           position: "sticky",
@@ -1665,7 +1664,7 @@ export default function HomePage() {
               i
             </div>
             <p style={{ margin: 0, fontSize: 12, color: "#444" }}>
-              Independent gaming nodes secured by trustless onchain bonds.
+            Provably verifiable protocol secured by trustless onchain bonds.
             </p>
             <button
               style={{

@@ -21,7 +21,7 @@ The video covers: creating a game, staking XLM, joining as black, making moves (
 
 ## What is Kizuna?
 
-Kizuna (絆 - "Bond") is an arcade hub for independent, skill-based platforms built on Stellar. Unlike traditional gaming sites, Kizuna uses Soroban smart contracts to act as a trustless escrow. Players stake digital assets (XLM) into a secure "bond" before a match. The protocol ensures that the pot is only released to the winner based on immutable onchain move records.
+Kizuna (絆 - "Bond") is a provably verifiable gaming protocol and arcade hub for independent, skill-based games built on Stellar. Unlike traditional gaming sites, Kizuna uses Soroban smart contracts to act as a trustless escrow. Players stake digital assets (XLM) into a secure "bond" before a match. The protocol ensures that the pot is only released to the winner based on immutable onchain move records.
 
 Current Supported:
 
@@ -29,7 +29,7 @@ Chess: Full move-validation and FEN-syncing onchain.
 
 Pool (Coming Soon): Physics-based wagering.
 
-Battleship (Coming Soon): Zero-knowledge stake protection.
+Battleship (Coming Soon): Zero-knowledge stake protection, allowing players to prove hits and misses without revealing their board layout until the match is settled.
 ---
 
 ## Screenshots
