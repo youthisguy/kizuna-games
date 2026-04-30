@@ -27,9 +27,10 @@ Current Supported:
 
 Chess: Full move-validation and FEN-syncing onchain.
 
-Pool (Coming Soon): Physics-based wagering.
+Pool: Physics-based wagering.
 
-Battleship (Coming Soon): Zero-knowledge stake protection, allowing players to prove hits and misses without revealing their board layout until the match is settled.
+Battleship: Zero-knowledge stake protection, allowing players to prove hits and misses without revealing their board layout until the match is settled.
+
 ---
 
 ## Screenshots

@@ -13,7 +13,6 @@ import {
   ArrowUpCircle,
 } from "lucide-react";
 
- 
 const GAMES = [
   {
     id: "chess",
@@ -50,11 +49,11 @@ const GAMES = [
     tagline: "Rack 'em. Break 'em.",
     description:
       "Call your pockets and run the table. XLM pot for the one who clears it.",
-    href: "#",
-    status: "soon" as const,
-    accentColor: "#10b981",
-    glowColor: "rgba(16,185,129,0.5)",
-    votes: 5991,
+    href: "/pool",
+    status: "live" as const,
+    accentColor: "#d97706",
+    glowColor: "rgba(217,119,6,0.5)",
+    votes: 13,
     featured: true,
   },
 ] as const;
@@ -1276,7 +1275,7 @@ function SpotlightCard({
             (e.currentTarget as HTMLButtonElement).style.opacity = "1";
           }}
         >
-          {isLive ? "Play now" : "Coming soon"}
+          {isLive ? "Play" : "Coming soon"}
         </button>
       </div>
     </div>
@@ -1296,18 +1295,17 @@ export default function HomePage() {
   );
 
   return (
-<div
- 
-  className="min-h-screen bg-[#0d0e12] text-[#e0e0e0]  rounded-lg overflow-hidden shadow-inner"
-  style={{
-    fontFamily: "'Inter', 'SF Pro Display', system-ui, sans-serif",
-  }}
->
+    <div
+      className="min-h-screen bg-[#0d0e12] text-[#e0e0e0]  rounded-lg overflow-hidden shadow-inner"
+      style={{
+        fontFamily: "'Inter', 'SF Pro Display', system-ui, sans-serif",
+      }}
+    >
       {/* Top nav bar */}
       <nav
-       onClick={() => {
-        setShowNotifications(!showNotifications);
-      }}
+        onClick={() => {
+          setShowNotifications(!showNotifications);
+        }}
         className="desktop-only-nav"
         style={{
           position: "sticky",
@@ -1636,24 +1634,30 @@ export default function HomePage() {
               i
             </div>
             <p style={{ margin: 0, fontSize: 12, color: "#444" }}>
-            Provably verifiable protocol secured by trustless onchain bonds.
+              Provably verifiable protocol secured by trustless onchain bonds.
             </p>
-            <button
-              style={{
-                marginLeft: "auto",
-                flexShrink: 0,
-                background: "none",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 6,
-                padding: "4px 10px",
-                fontSize: 11,
-                color: "#555",
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-              }}
+            <a
+              href="https://github.com/youthisguy/kizuna-games#readme"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ marginLeft: "auto" }}
             >
-              Learn the Logic
-            </button>
+              <button
+                style={{
+                  flexShrink: 0,
+                  background: "none",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: 6,
+                  padding: "4px 10px",
+                  fontSize: 11,
+                  color: "#555",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Learn the Logic
+              </button>
+            </a>
           </div>
         </div>
       </div>

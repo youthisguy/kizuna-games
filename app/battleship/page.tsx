@@ -30,7 +30,7 @@ import {
 import { useKingFallAuth } from "../hooks/Usekingfallauth";
 import UsernameModal from "../components/UsernameModal";
 
-// ─── Config (same escrow contract) ───────────────────────────────────────────
+ 
 const ESCROW_CONTRACT_ID =
   "CCSDLJLDIJSAOKFLX2QWCOVLENA4FFN2EMSGJRFKTIBYY4UUA2HKDGBN";
 const NATIVE_TOKEN_ID =
@@ -41,8 +41,7 @@ const RPC_URL = "https://soroban-testnet.stellar.org:443";
 const server = new StellarRpc.Server(RPC_URL);
 const networkPassphrase = Networks.TESTNET;
 
-// ─── Game type tag — all battleship games use tag=1 so they're queryable ─────
-// The escrow `create_game` accepts a `game_type: u64` arg (0=chess, 1=battleship)
+ 
 const GAME_TYPE = 1n;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -106,9 +105,9 @@ interface GameInfo {
   created_at: number;
 }
 
-// ─── Mini battle grid preview ─────────────────────────────────────────────────
+ 
 const MiniBattleGrid = ({ gameId }: { gameId: string }) => {
-  // Deterministic "hit" pattern based on gameId so each card looks different
+ 
   const seed = parseInt(gameId) || 1;
   const hits = new Set<number>();
   const misses = new Set<number>();
@@ -220,10 +219,7 @@ export default function BattleshipLobby() {
   const fetchGameInfo = async (id: bigint): Promise<GameInfo | null> => {
     try {
       const d = await simRead(ESCROW_CONTRACT_ID, "get_game", [nativeToScVal(id, { type: "u64" })], connectedAddress || undefined);
-      // Filter: only battleship games (game_type === 1)
-      // If your contract doesn't store game_type yet, remove this filter
-      // const gt = typeof d.game_type === "bigint" ? d.game_type : BigInt(d.game_type ?? 0);
-      // if (gt !== GAME_TYPE) return null;
+ 
       return {
         id: id.toString(),
         status: parseStatus(d.status),
@@ -261,7 +257,7 @@ export default function BattleshipLobby() {
   const fetchAllGames = useCallback(async () => {
     setAllGamesLoading(true);
     try {
-      // Re-use escrow get_active_games or adapt to a battleship-specific registry when available
+ 
       const raw = await simRead(ESCROW_CONTRACT_ID, "get_active_games", [], connectedAddress || undefined);
       const ids = normalizeIds(raw);
       const games = (await Promise.all(ids.map(fetchGameInfo))).filter(Boolean) as GameInfo[];
