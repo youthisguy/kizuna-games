@@ -56,6 +56,20 @@ const GAMES = [
     votes: 13,
     featured: true,
   },
+  {
+    id: "liars-dice",
+    name: "Liar's Dice",
+    category: "Bluff. Bid. Outlast.",
+    tagline: "Trust no one. Call the bluff.",
+    description:
+      "Deception meets probability. Keep your dice hidden and the stakes high in this on-chain bluffing game.",
+    href: "/liars-dice",
+    status: "live" as const,
+    accentColor: "#d97706",
+    glowColor: "rgba(217,119,6,0.5)",
+    votes: 24,
+    featured: true,
+  },
 ] as const;
 
 // ─── Chess canvas ─────────────────────────────────────────────────────────────
@@ -988,6 +1002,213 @@ function PoolCanvas({ fill = false }: { fill?: boolean }) {
   );
 }
 
+// ─── Liar's Dice canvas ───────────────────────────────────────────────────────
+function LiarsDiceCanvas({ fill = false }: { fill?: boolean }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d")!;
+    const W = fill ? 320 : 160, H = fill ? 240 : 160;
+    canvas.width = W;
+    canvas.height = H;
+
+    const DIE_SIZE = fill ? 28 : 18;
+    const GAP = fill ? 10 : 6;
+
+    // Dot positions for each face value (normalized -1 to 1 grid)
+    const DOTS: [number, number][][] = [
+      [[0, 0]],
+      [[-1, -1], [1, 1]],
+      [[-1, -1], [0, 0], [1, 1]],
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]],
+      [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]],
+      [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]],
+    ];
+
+    type Die = { value: number; revealed: boolean; x: number; y: number; shakeT: number; shaking: boolean };
+
+    // Two players: top (opponent, hidden) and bottom (player, revealed)
+    const makeDice = (): { top: Die[]; bottom: Die[] } => {
+      const row = (y: number, revealed: boolean): Die[] =>
+        Array.from({ length: 5 }, (_, i) => ({
+          value: Math.ceil(Math.random() * 6),
+          revealed,
+          x: W / 2 - 2 * (DIE_SIZE + GAP) + i * (DIE_SIZE + GAP),
+          y,
+          shakeT: 0,
+          shaking: false,
+        }));
+      return {
+        top: row(fill ? H * 0.2 : H * 0.18, false),
+        bottom: row(fill ? H * 0.65 : H * 0.68, true),
+      };
+    };
+
+    type Phase = "show" | "shaking" | "reveal" | "pause";
+    let dice = makeDice();
+    let phase: Phase = "show";
+    let tick = 0;
+    let pauseT = 0;
+
+    // Bid state
+    let bidQty = 3, bidFace = 4;
+
+    const drawDie = (d: Die) => {
+      const s = DIE_SIZE;
+      const ox = d.shaking ? (Math.random() - 0.5) * 3 : 0;
+      const oy = d.shaking ? (Math.random() - 0.5) * 3 : 0;
+      const x = d.x + ox, y = d.y + oy;
+
+      // Shadow
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.beginPath();
+      ctx.roundRect(x - s / 2 + 2, y - s / 2 + 2, s, s, 4);
+      ctx.fill();
+
+      // Die face
+      if (!d.revealed) {
+        ctx.fillStyle = "#1e2636";
+        ctx.strokeStyle = "#3a4a6a";
+      } else {
+        ctx.fillStyle = "#f0ece0";
+        ctx.strokeStyle = "#c8b890";
+      }
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(x - s / 2, y - s / 2, s, s, 4);
+      ctx.fill();
+      ctx.stroke();
+
+      if (!d.revealed) {
+        // Question mark on hidden dice
+        ctx.fillStyle = "#4a6080";
+        ctx.font = `bold ${s * 0.5}px monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("?", x, y + 1);
+        return;
+      }
+
+      // Dots
+      const DOT_R = s * 0.09;
+      const SPREAD = s * 0.27;
+      ctx.fillStyle = "#2a1a0a";
+      (DOTS[d.value - 1] || []).forEach(([dx, dy]) => {
+        ctx.beginPath();
+        ctx.arc(x + dx * SPREAD, y + dy * SPREAD, DOT_R, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    };
+
+    const drawBid = () => {
+      const cx = W / 2, by = H / 2;
+      const label = `${bidQty} × `;
+      const dieStr = String(bidFace);
+
+      ctx.font = `bold ${fill ? 15 : 10}px monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      // Bid pill background
+      const pillW = fill ? 110 : 70, pillH = fill ? 28 : 18;
+      ctx.fillStyle = "#1a1c28";
+      ctx.strokeStyle = "#d97706";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(cx - pillW / 2, by - pillH / 2, pillW, pillH, pillH / 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Pulsing glow
+      const t = Date.now() / 500;
+      ctx.strokeStyle = `rgba(217,119,6,${0.3 + 0.2 * Math.sin(t)})`;
+      ctx.lineWidth = fill ? 2.5 : 1.5;
+      ctx.beginPath();
+      ctx.roundRect(cx - pillW / 2 - 2, by - pillH / 2 - 2, pillW + 4, pillH + 4, pillH / 2 + 2);
+      ctx.stroke();
+
+      ctx.fillStyle = "#f0c060";
+      ctx.font = `bold ${fill ? 13 : 9}px monospace`;
+      ctx.fillText(`BID: ${bidQty} × [${bidFace}]`, cx, by);
+    };
+
+    const draw = () => {
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = "#0a0c14";
+      ctx.fillRect(0, 0, W, H);
+
+      // Felt texture lines
+      ctx.strokeStyle = "rgba(217,119,6,0.04)";
+      ctx.lineWidth = 1;
+      for (let y = 0; y < H; y += 8) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(W, y);
+        ctx.stroke();
+      }
+
+      // Divider line
+      ctx.strokeStyle = "rgba(255,255,255,0.05)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(16, H / 2);
+      ctx.lineTo(W - 16, H / 2);
+      ctx.stroke();
+
+      // Player labels
+      ctx.font = `${fill ? 10 : 7}px monospace`;
+      ctx.fillStyle = "rgba(255,255,255,0.2)";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText("OPP", 6, dice.top[0].y);
+      ctx.fillText("YOU", 6, dice.bottom[0].y);
+
+      [...dice.top, ...dice.bottom].forEach(drawDie);
+      drawBid();
+    };
+
+    const step = () => {
+      tick++;
+
+      if (phase === "show") {
+        if (tick > 90) { phase = "shaking"; tick = 0; bidQty = Math.ceil(Math.random() * 4) + 1; bidFace = Math.ceil(Math.random() * 5) + 1; }
+      } else if (phase === "shaking") {
+        dice.top.forEach(d => { d.shaking = true; });
+        dice.bottom.forEach(d => { d.shaking = true; });
+        if (tick > 35) {
+          dice.top.forEach(d => { d.shaking = false; d.value = Math.ceil(Math.random() * 6); });
+          dice.bottom.forEach(d => { d.shaking = false; d.value = Math.ceil(Math.random() * 6); d.revealed = false; });
+          phase = "reveal"; tick = 0;
+        }
+      } else if (phase === "reveal") {
+        // Reveal bottom dice one by one
+        const idx = Math.floor(tick / 12);
+        dice.bottom.forEach((d, i) => { if (i <= idx) d.revealed = true; });
+        if (idx >= 5) { phase = "pause"; tick = 0; pauseT = 80; }
+      } else if (phase === "pause") {
+        pauseT--;
+        if (pauseT <= 0) {
+          dice = makeDice();
+          phase = "show"; tick = 0;
+        }
+      }
+
+      draw();
+    };
+
+    draw();
+    const id = setInterval(step, 40);
+    return () => clearInterval(id);
+  }, [fill]);
+  return (
+    <canvas
+      ref={ref}
+      style={{ imageRendering: "pixelated", width: "100%", height: "100%", display: "block" }}
+    />
+  );
+}
+
 // ─── Canvas map ───────────────────────────────────────────────────────────────
 const CANVAS_MAP: Record<string, React.ComponentType<{ fill?: boolean }>> = {
   chess: ChessCanvas,
@@ -995,6 +1216,7 @@ const CANVAS_MAP: Record<string, React.ComponentType<{ fill?: boolean }>> = {
   darts: DartsCanvas,
   words: WordsCanvas,
   pool: PoolCanvas,
+  "liars-dice": LiarsDiceCanvas,
 };
 
 // ─── Game icon (small circle avatar) ─────────────────────────────────────────
